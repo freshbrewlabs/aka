@@ -1,7 +1,9 @@
 [workspace]
 resolver = "2"
 
-members = ["src/aka-arbiter",
-  "src/aka-cli", "src/aka-proxy",
+members = [
+  "src/aka-arbiter",
+  "src/aka-cli",
+  "src/aka-proxy",
 ]
 
