@@ -1,5 +1,6 @@
 [package]
 name = "aka-arbiter"
+description = "AKA Arbiter is a process to watching and managing changes to docker networking"
 version = "0.1.0"
 edition = "2024"
 license = "GPL-3.0"

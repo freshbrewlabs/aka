@@ -1,5 +1,6 @@
 [package]
 name = "aka-cli"
+description = "AKA CLI is the command line interface for starting, updating, and managing AKA"
 version = "0.1.0"
 edition = "2024"
 license = "GPL-3.0"

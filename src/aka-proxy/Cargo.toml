@@ -1,5 +1,6 @@
 [package]
 name = "aka-proxy"
+description = "AKA Proxy redirets traffic from inside or outside a docker setup to the correct container"
 version = "0.1.0"
 edition = "2024"
 license = "GPL-3.0"
