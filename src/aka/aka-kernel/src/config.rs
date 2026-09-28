@@ -32,7 +32,7 @@ impl Default for DnsConfig {
             enabled: true,
             domains: vec![DomainAddress::default()],
             container_name: "aka_dns".into(),
-            image: "aka-dns:local".into(),
+            image: "dewey4iv/aka-dns:latest".into(),
             port: 53,
             bind_ip: "127.0.0.1".into(),
             kill_others: KillOthers::default(),
@@ -86,7 +86,7 @@ impl Default for ProxyConfig {
         Self {
             enabled: true,
             container_name: "aka_proxy".into(),
-            image: "aka-proxy:local".into(),
+            image: "dewey4iv/aka-proxy:latest".into(),
             network: "aka".into(),
             http_port: 80,
             tls_enabled: true,

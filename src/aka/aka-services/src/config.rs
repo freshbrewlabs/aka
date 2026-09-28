@@ -25,7 +25,7 @@ pub const DEFAULT_TOML: &str = r##"# aka config file
 
 [dns]
 enabled = true
-image = "aka-dns:local"      # build with bin/build.sh
+image = "dewey4iv/aka-dns:latest"    # aka pull, or build with bin/build.sh
 container_name = "aka_dns"
 port = 53                    # must be 53 unless resolv.port matches this
 bind_ip = "127.0.0.1"        # host interface the dns ports are published on
@@ -48,7 +48,7 @@ address = "127.0.0.1"        # answer returned for queries against the domain
 
 [proxy]
 enabled = true
-image = "aka-proxy:local"    # angie-based proxy, devops/docker/aka-proxy
+image = "dewey4iv/aka-proxy:latest"  # angie-based proxy, devops/docker/aka-proxy
 container_name = "aka_proxy"
 network = "aka"              # docker network the proxy lives on
 http_port = 80               # host port published for http vhosts

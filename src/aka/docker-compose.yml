@@ -1,7 +1,7 @@
 # aka dev compose: build the two managed images and run demo containers
 # that declare aka routes.
 #
-#   docker compose build            # aka-proxy:local + aka-dns:local
+#   docker compose build            # ${HUB_NAMESPACE:-dewey4iv}/aka-{proxy,dns}:${TAG:-latest}
 #   docker compose up -d demo-web demo-cache
 #   cargo run -p aka-cli -- up      # then: curl http://demo.docker
 
@@ -11,13 +11,13 @@ services:
   aka-proxy:
     build:
       context: ../../devops/docker/aka-proxy
-    image: aka-proxy:local
+    image: ${HUB_NAMESPACE:-dewey4iv}/aka-proxy:${TAG:-latest}
     profiles: ["images"]
 
   aka-dns:
     build:
       context: ../../devops/docker/aka-dns
-    image: aka-dns:local
+    image: ${HUB_NAMESPACE:-dewey4iv}/aka-dns:${TAG:-latest}
     profiles: ["images"]
 
   demo-web:

@@ -12,8 +12,8 @@ cd "$(dirname "$0")/.."
 command -v docker >/dev/null || { echo "docker is required" >&2; exit 1; }
 docker info >/dev/null 2>&1 || { echo "docker daemon is not running" >&2; exit 1; }
 
-echo "==> building aka images (aka-proxy:local, aka-dns:local)"
-bash src/aka/build.sh
+echo "==> building aka images (tagged ${HUB_NAMESPACE:-dewey4iv}/aka-*:${TAG:-latest})"
+bash src/aka/build.sh --no-push
 
 echo "==> installing aka (cargo install --path src/aka/aka-cli)"
 cargo install --path src/aka/aka-cli --locked --force
