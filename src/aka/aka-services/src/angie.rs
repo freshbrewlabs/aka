@@ -23,12 +23,31 @@ pub const DOWN_INCLUDE_FILENAME: &str = "aka-down.conf.inc";
 /// `DOWN_INCLUDE_FILENAME` inside the proxy container (the http.d mount).
 pub const DOWN_INCLUDE_PATH: &str = "/etc/angie/http.d/aka-down.conf.inc";
 
+/// How long angie keeps a proxied connection alive while it says nothing,
+/// in both directions.
+///
+/// Long on purpose: dev services hold sockets that can stay quiet for a whole
+/// work session — websocket hot-reload, SSE, long-poll, a build streaming its
+/// logs — and angie's 60 s default turns that silence into a drop. Trunk's
+/// live-reload client is the loud case: it treats a dropped socket as "the
+/// server restarted" and calls `window.location.reload()`, so a console left
+/// idle reloaded itself on a ~65 s timer. The stream servers take the same
+/// window (`proxy_timeout 1h`).
+const PROXY_IDLE_TIMEOUT: &str = "1h";
+
 pub fn render_http(table: &RouteTable, proxy: &ProxyConfig) -> String {
     let mut out = String::new();
     out.push_str("# managed by aka (aka _proxyd); do not edit\n\n");
     out.push_str(
         "map $http_upgrade $aka_connection {\n    default upgrade;\n    ''      close;\n}\n\n",
     );
+    // Written at http level rather than per vhost so every server block —
+    // plain, https-backend, TLS-terminated, and any added later — inherits
+    // the window instead of relying on each one remembering to render it.
+    out.push_str(&format!(
+        "proxy_read_timeout {PROXY_IDLE_TIMEOUT};\nproxy_send_timeout {PROXY_IDLE_TIMEOUT};\n\n"
+    ));
+
     // Unrouted hosts get the 502 down page: a Host aka knows nothing about
     // is a service that isn't running, and the page refreshes itself until
     // one appears.
@@ -299,6 +318,28 @@ mod tests {
         assert!(out.contains("server_name myapp.docker;"));
         assert!(out.contains("proxy_pass http://aka_h0;"));
         assert!(out.contains("proxy_set_header Upgrade $http_upgrade;"));
+    }
+
+    #[test]
+    fn proxied_connections_get_a_long_idle_window() {
+        let table = RouteTable {
+            http: vec![route(
+                &["a.docker"],
+                RouteProto::Http,
+                3000,
+                &["172.20.0.5:3000"],
+            )],
+            ..Default::default()
+        };
+
+        let out = rendered_http(&table);
+        // Rendered before the first server block, i.e. in the http context
+        // every vhost inherits: an idle websocket (trunk's live-reload socket
+        // most of all) otherwise dies on angie's 60 s default and the client
+        // reads the drop as a restart.
+        let (globals, _) = out.split_once("server {").expect("a vhost");
+        assert!(globals.contains("proxy_read_timeout 1h;\n"), "{out}");
+        assert!(globals.contains("proxy_send_timeout 1h;\n"), "{out}");
     }
 
     #[test]

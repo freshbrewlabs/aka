@@ -89,6 +89,13 @@ Names are compatible with dory / nginx-proxy, so existing containers just work.
   `proxy.ssl_certs_dir` and any http route for that host also gets a TLS
   vhost on `:8443` (SNI on the shared `:443` listener hops to it).
 
+Proxied connections get a 1 h idle window in both directions
+(`proxy_read_timeout` / `proxy_send_timeout`, rendered once in the http
+context so every vhost inherits it), which is what keeps sockets that go quiet
+between events alive — websocket hot-reload (trunk), SSE, long polls, a build
+streaming its logs. angie's 60 s default drops those sockets, and clients that
+read a drop as "the server restarted" reload the page.
+
 ## Commands
 
 ```
