@@ -118,7 +118,7 @@ pub fn offer_to_kill(port: u16, udp: bool, kill_others: &KillOthers) -> bool {
     for description in &descriptions {
         eprintln!("process {description} is listening on port {port}");
     }
-    eprintln!("this interferes with aka's dns service (aka.dns.kill_others: {port})");
+    eprintln!("this interferes with aka's dns service (dns.kill_others: {port})");
 
     let answer = match kill_others.answer() {
         Some(answer) => answer,
@@ -164,7 +164,7 @@ pub fn offer_to_stop_containers(port: u16, names: &[String], kill_others: &KillO
         "docker container(s) {} publish port {port}",
         names.join(", ")
     );
-    eprintln!("this interferes with aka's services (aka.dns.kill_others: {port})");
+    eprintln!("this interferes with aka's services (dns.kill_others: {port})");
 
     let answer = match kill_others.answer() {
         Some(answer) => answer,

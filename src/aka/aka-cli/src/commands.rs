@@ -430,11 +430,10 @@ pub fn config_file(
     upgrade: bool,
 ) -> Result<(), BoxedError> {
     let selection = provider.fetch_unchecked::<ConfigSelection>();
-    let paths = provider.fetch_unchecked::<AkaPaths>();
     let target = selection
         .explicit
         .clone()
-        .unwrap_or_else(|| paths.default_config_path());
+        .unwrap_or_else(aka_services::paths::default_config_path);
 
     if upgrade {
         aka_services::config::upgrade_config_file(&target)?;

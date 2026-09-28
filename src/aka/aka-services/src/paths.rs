@@ -48,10 +48,6 @@ impl AkaPaths {
         self.home.join("proxyd.log")
     }
 
-    pub fn default_config_path(&self) -> PathBuf {
-        self.home.join("aka.yml")
-    }
-
     pub fn ensure_dirs(&self) -> Result<(), BoxedError> {
         std::fs::create_dir_all(&self.home)?;
         std::fs::create_dir_all(self.http_dir())?;
@@ -60,9 +56,12 @@ impl AkaPaths {
     }
 }
 
-/// Default config file location: `~/.aka/aka.yml` (aka's `~/.dory.yml`).
+/// Default config file location: `~/.aka.toml` (aka's `~/.dory.yml`).
+/// Lives directly in the user's home, independent of `AKA_HOME` (which only
+/// relocates the runtime dir), so tests and dev loops always pass `-c`.
 pub fn default_config_path() -> PathBuf {
-    AkaPaths::resolve()
-        .map(|p| p.default_config_path())
-        .unwrap_or_else(|_| PathBuf::from(".aka.yml"))
+    std::env::var("HOME")
+        .map(PathBuf::from)
+        .map(|home| home.join(".aka.toml"))
+        .unwrap_or_else(|_| PathBuf::from(".aka.toml"))
 }

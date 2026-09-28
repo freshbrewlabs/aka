@@ -14,7 +14,7 @@ struct Cli {
     #[arg(short, long, global = true)]
     verbose: bool,
 
-    /// Path to a config file (default: ./.aka.yml upward, then ~/.aka/aka.yml)
+    /// Path to a config file (default: ./.aka.toml upward, then ~/.aka.toml)
     #[arg(short = 'c', long, global = true)]
     config: Option<std::path::PathBuf>,
 
@@ -55,7 +55,7 @@ enum Commands {
         #[arg(long)]
         json: bool,
     },
-    /// Write the default config file (~/.aka/aka.yml)
+    /// Write the default config file (~/.aka.toml)
     ConfigFile {
         /// Overwrite an existing file
         #[arg(short, long)]

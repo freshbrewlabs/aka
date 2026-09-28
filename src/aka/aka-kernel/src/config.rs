@@ -1,12 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-/// Top-level wrapper for `~/.aka.yml` (mirrors dory's `~/.dory.yml`).
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct AkaFile {
-    pub aka: AkaConfig,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 #[derive(Default)]

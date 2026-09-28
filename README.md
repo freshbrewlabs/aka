@@ -67,34 +67,52 @@ Global flags: `-v/--verbose`, `-c/--config <path>`.
 
 ## Configuration
 
-`~/.aka/aka.yml` (written by `aka config-file`), or `./.aka.yml` searched
-upward from the cwd; `-c` wins. Everything lives under a top-level `aka:`
-key. Highlights:
+`~/.aka.toml` (written by `aka config-file`), or `./.aka.toml` searched
+upward from the cwd; `-c` wins. TOML, with dory's config mapped onto
+top-level sections: `[dns]` ← dory `dnsmasq`, `[proxy]` ← `nginx_proxy`,
+`[resolv]` ← `resolv`.
 
-```yaml
-aka:
-  dns:
-    image: aka-dns:local
-    port: 53                # published on dns.bind_ip
-    bind_ip: 127.0.0.1
-    domains:                # wildcards resolved to the address below
-      - domain: docker
-        address: 127.0.0.1  # loopback: docker publishes the proxy here
-    kill_others: ask        # true | false | ask | comma-list of ports
-  resolv:
-    enabled: true           # write /etc/resolver/<domain> (sudo)
-  proxy:
-    image: aka-proxy:local
-    http_port: 80
-    tls_port: 443
-    tls_enabled: true
-    ssl_certs_dir: ""       # enables :8443 terminated https vhosts
-    network: aka
+Multiple TLDs are first-class — each `[[dns.domains]]` entry (dory's
+`domains` array, once again) serves that domain **and all subdomains**:
+
+```toml
+[[dns.domains]]
+domain = "docker"
+address = "127.0.0.1"
+
+[[dns.domains]]
+domain = "test"
+address = "127.0.0.1"
+
+[[dns.domains]]
+domain = "localhost"
+address = "127.0.0.1"   # explicit entry => dnsmasq answers *.localhost too
+
+[resolv]
+enabled = true          # writes /etc/resolver/docker, /etc/resolver/test, ...
 ```
+
+Verified: `dig +short a.docker` / `sub.x.test` / `y.localhost` all answer
+the configured address; browsers need no resolver files for `*.localhost`
+at all (they resolve it to loopback natively).
+
+`dory → aka` key map:
+
+| dory (`~/.dory.yml`) | aka (`~/.aka.toml`) |
+|---|---|
+| `dnsmasq.domains` (`tld`) | `[[dns.domains]]` |
+| `dnsmasq.port` | `dns.port` |
+| `dnsmasq.container_name` | `dns.container_name` |
+| `kill_others` | `dns.kill_others` |
+| `nginx_proxy.port` / `.tls_port` | `proxy.http_port` / `proxy.tls_port` |
+| `nginx_proxy.https_enabled` | `proxy.tls_enabled` |
+| `nginx_proxy.ssl_certs_dir` | `proxy.ssl_certs_dir` |
+| `resolv.nameserver` / `.port` | `resolv.nameserver` / `resolv.port` |
+| — (docker-machine IP) | `dns.bind_ip` (loopback on Docker Desktop) |
 
 Runtime home is `~/.aka` (`AKA_HOME` overrides; used by tests): rendered
 angie configs (`proxy.d/http`, `proxy.d/stream`), `state.json`,
-`proxyd.pid`, `proxyd.log`.
+`proxyd.pid`, `proxyd.log`. `-c/--config` always overrides file discovery.
 
 ## Architecture
 
@@ -140,9 +158,10 @@ docker is the datastore.
   `*.docker` to 127.0.0.1 without touching system DNS; writing them needs
   sudo (`aka up` shells out; `aka down` removes them). `resolv.enabled:
   false` skips this for testing with `dig @127.0.0.1` / `curl --resolve`.
-- **`.localhost` hosts** work through browsers (which resolve `*.localhost`
-  to loopback themselves) but dnsmasq answers queries for them from its
-  built-in zone, not aka's — prefer the `docker` TLD.
+- **`.localhost` hosts**: browsers resolve `*.localhost` to loopback on
+  their own. For CLI tools (`curl`, `dig`) dnsmasq needs the explicit
+  `[[dns.domains]] domain = "localhost"` entry — once present it answers
+  authoritatively (verified).
 - **tcp route changes recreate `aka_proxy`** (docker fixes published ports
   at create time); a recreate takes ~1s and briefly drops in-flight
   connections on the proxy.
@@ -159,6 +178,6 @@ cargo run -p aka-cli -- up -c ./dev.yml   # dev loop; AKA_HOME=./.aka-dev
 ```
 
 Unit tests cover discovery, renderers (golden fragments + map-line shape),
-config merge/upgrade, state round-trip, dnsmasq args, and the port-conflict
-classifier. Live verification (images + daemon + http/tcp/tls termination
+TOML config merge/upgrade with multi-domain lists, state round-trip, dnsmasq
+args, and the port-conflict classifier. Live verification (images + daemon + http/tcp/tls termination
 through a real Docker Desktop) is documented in the commit history.
