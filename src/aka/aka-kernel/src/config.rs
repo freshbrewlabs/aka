@@ -107,6 +107,14 @@ pub struct ProxyConfig {
     pub bind_ip: String,
     /// Restart policy for the managed containers.
     pub restart: String,
+    /// Largest request body the proxy accepts, in angie's own size syntax: a
+    /// number of bytes with an optional `k`/`m`/`g` suffix, or `0` for no
+    /// limit (the default). angie's built-in 1 MiB cap answers 413 to uploads
+    /// that are ordinary on a dev box, and aka's `stream` routes never had a
+    /// cap to begin with. The empty string renders no directive at all, which
+    /// restores angie's default — and leaves the directive to a drop-in of
+    /// your own in `~/.aka/proxy.d/http`.
+    pub max_body_size: String,
 }
 
 impl Default for ProxyConfig {
@@ -122,6 +130,7 @@ impl Default for ProxyConfig {
             ssl_certs_dir: String::new(),
             bind_ip: "127.0.0.1".into(),
             restart: "unless-stopped".into(),
+            max_body_size: "0".into(),
         }
     }
 }
@@ -134,6 +143,23 @@ impl ProxyConfig {
             ports.push(self.tls_port);
         }
         ports
+    }
+
+    /// The `client_max_body_size` to render, or `None` when the value is empty
+    /// and angie's own default should stand.
+    pub fn body_size_setting(&self) -> Option<&str> {
+        (!self.max_body_size.is_empty()).then_some(self.max_body_size.as_str())
+    }
+
+    /// angie's size syntax: `0`, a byte count, or a byte count with exactly one
+    /// `k`/`m`/`g` suffix.
+    pub fn is_body_size(value: &str) -> bool {
+        let digits = match value.chars().last() {
+            Some('k' | 'K' | 'm' | 'M' | 'g' | 'G') => &value[..value.len() - 1],
+            Some(_) => value,
+            None => return false,
+        };
+        !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
     }
 }
 

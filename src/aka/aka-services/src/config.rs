@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use aka_kernel::BoxedError;
-use aka_kernel::config::AkaConfig;
+use aka_kernel::config::{AkaConfig, ProxyConfig};
 use toml::Value;
 
 use crate::paths::default_config_path;
@@ -58,6 +58,7 @@ tls_port = 443
 ssl_certs_dir = ""           # host dir with <host>.crt/.key pairs to terminate TLS
 bind_ip = "127.0.0.1"
 restart = "unless-stopped"
+max_body_size = "0"          # max request body; 0 = no limit, "" = angie's own default (1 MiB)
 
 [admin]
 enabled = true                        # aka status as a web dashboard, run beside dns + proxy
@@ -115,7 +116,24 @@ fn parse_config(raw: &str) -> Result<AkaConfig, BoxedError> {
     let defaults: Value = raw_toml(DEFAULT_TOML)?;
     let user: Value = raw_toml(raw)?;
     let merged = deep_merge(defaults, user);
-    Ok(normalize(merged.try_into()?))
+    let cfg = normalize(merged.try_into()?);
+    validate(&cfg)?;
+    Ok(cfg)
+}
+
+/// Reject what angie would itself reject, so the bad value surfaces on the
+/// next `aka up` with its key named instead of as `reload failed` in
+/// `aka status`: a failing `angie -t` makes proxyd keep the previous config,
+/// so every later route change silently stops applying.
+fn validate(cfg: &AkaConfig) -> Result<(), BoxedError> {
+    let size = &cfg.proxy.max_body_size;
+    if !size.is_empty() && !ProxyConfig::is_body_size(size) {
+        return Err(format!(
+            "[proxy] max_body_size = {size:?} is not an angie size; use \"0\" for no limit, a byte count, or a suffix like \"64m\" (\"\" leaves the directive to angie)"
+        )
+        .into());
+    }
+    Ok(())
 }
 
 fn raw_toml(raw: &str) -> Result<Value, BoxedError> {
@@ -205,6 +223,7 @@ mod tests {
         );
         assert_eq!(cfg.resolv.port, Some(53));
         assert_eq!(cfg.dns.kill_others.answer(), None);
+        assert_eq!(cfg.proxy.max_body_size, "0", "no body cap out of the box");
     }
 
     #[test]
@@ -277,6 +296,27 @@ address = "127.0.0.1"
     }
 
     #[test]
+    fn body_limit_takes_angie_size_syntax() {
+        for size in ["0", "512", "1024k", "64m", "2G"] {
+            let cfg = parse_config(&format!("[proxy]\nmax_body_size = \"{size}\"\n")).unwrap();
+            assert_eq!(cfg.proxy.max_body_size, size, "{size} is valid");
+        }
+        let cfg = parse_config("[proxy]\nmax_body_size = \"\"\n").unwrap();
+        assert_eq!(cfg.proxy.max_body_size, "", "empty leaves it to angie");
+    }
+
+    #[test]
+    fn a_body_limit_angie_would_refuse_fails_at_parse_time() {
+        for size in ["1 mb", "m", "-1", "1.5m", "10x"] {
+            let err = parse_config(&format!("[proxy]\nmax_body_size = \"{size}\"\n")).unwrap_err();
+            assert!(
+                err.to_string().contains("max_body_size"),
+                "{size} accepted: {err}"
+            );
+        }
+    }
+
+    #[test]
     fn unknown_keys_are_rejected() {
         let err = parse_config("typo_key = 1\n").unwrap_err();
         assert!(err.to_string().contains("typo_key"), "{err}");
@@ -296,6 +336,10 @@ address = "127.0.0.1"
 
         assert_eq!(cfg.dns.port, 5353, "user value survives");
         assert_eq!(cfg.proxy.container_name, "aka_proxy", "new keys merged in");
+        assert_eq!(
+            cfg.proxy.max_body_size, "0",
+            "max_body_size merged into old files"
+        );
         assert_eq!(
             cfg.admin.container_name, "aka_admin",
             "[admin] merged into old files"

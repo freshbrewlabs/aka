@@ -43,10 +43,19 @@ pub fn render_http(table: &RouteTable, proxy: &ProxyConfig) -> String {
     );
     // Written at http level rather than per vhost so every server block —
     // plain, https-backend, TLS-terminated, and any added later — inherits
-    // the window instead of relying on each one remembering to render it.
-    out.push_str(&format!(
-        "proxy_read_timeout {PROXY_IDLE_TIMEOUT};\nproxy_send_timeout {PROXY_IDLE_TIMEOUT};\n\n"
-    ));
+    // the globals instead of relying on each one remembering to render them.
+    let mut globals = format!(
+        "proxy_read_timeout {PROXY_IDLE_TIMEOUT};\nproxy_send_timeout {PROXY_IDLE_TIMEOUT};\n"
+    );
+    // The body cap rides the same http-level block: angie's 1 MiB default is a
+    // 413 for any real upload (an 11 MB POST is a normal dev payload), and a
+    // per-vhost directive would leave the TLS-terminated and future blocks
+    // capped by accident.
+    if let Some(size) = proxy.body_size_setting() {
+        globals.push_str(&format!("client_max_body_size {size};\n"));
+    }
+    out.push_str(&globals);
+    out.push('\n');
 
     // Unrouted hosts get the 502 down page: a Host aka knows nothing about
     // is a service that isn't running, and the page refreshes itself until
@@ -300,6 +309,20 @@ mod tests {
         render_stream(table, &ProxyConfig::default())
     }
 
+    /// A table with one live http vhost: enough to carry the http-context
+    /// globals that every server block inherits.
+    fn one_http_route() -> RouteTable {
+        RouteTable {
+            http: vec![route(
+                &["a.docker"],
+                RouteProto::Http,
+                3000,
+                &["172.20.0.5:3000"],
+            )],
+            ..Default::default()
+        }
+    }
+
     #[test]
     fn http_vhost_renders_upstream_and_headers() {
         let table = RouteTable {
@@ -340,6 +363,39 @@ mod tests {
         let (globals, _) = out.split_once("server {").expect("a vhost");
         assert!(globals.contains("proxy_read_timeout 1h;\n"), "{out}");
         assert!(globals.contains("proxy_send_timeout 1h;\n"), "{out}");
+    }
+
+    #[test]
+    fn request_body_cap_is_rendered_where_every_vhost_inherits_it() {
+        let out = rendered_http(&one_http_route());
+        // Before the first server block, i.e. the http context: angie's 1 MiB
+        // default answers 413 to uploads a dev box does daily, and a per-vhost
+        // directive would leave the terminated block silently capped instead.
+        let (globals, _) = out.split_once("server {").expect("a vhost");
+        assert!(globals.contains("client_max_body_size 0;\n"), "{out}");
+    }
+
+    #[test]
+    fn a_configured_cap_renders_and_the_opt_out_omits_the_directive() {
+        let table = one_http_route();
+
+        let capped = ProxyConfig {
+            max_body_size: "64m".into(),
+            ..Default::default()
+        };
+        assert!(
+            render_http(&table, &capped).contains("client_max_body_size 64m;\n"),
+            "the configured value reaches angie verbatim"
+        );
+
+        let opted_out = ProxyConfig {
+            max_body_size: String::new(),
+            ..Default::default()
+        };
+        assert!(
+            !render_http(&table, &opted_out).contains("client_max_body_size"),
+            "an empty value leaves the directive to angie (or to a drop-in)"
+        );
     }
 
     #[test]

@@ -96,6 +96,15 @@ between events alive — websocket hot-reload (trunk), SSE, long polls, a build
 streaming its logs. angie's 60 s default drops those sockets, and clients that
 read a drop as "the server restarted" reload the page.
 
+Request bodies are uncapped by default (`client_max_body_size 0`, rendered in
+that same http context). angie's own 1 MiB default answers `413` to payloads a
+dev box posts daily — an 11 MB `POST` with an image or a bundle is routine —
+and aka's `stream` routes never had a cap either. Set `proxy.max_body_size` to
+a size to put a ceiling back (`"64m"`, `"1g"`), or to `""` to leave the
+directive to angie — or to your own drop-in in `~/.aka/proxy.d/http`, which is
+bind-mounted into the proxy and never touched by proxyd (only files ending in
+`.conf` are picked up; don't name one `aka.conf`).
+
 ## Commands
 
 ```
@@ -137,6 +146,9 @@ address = "127.0.0.1"
 [[dns.domains]]
 domain = "localhost"
 address = "127.0.0.1"   # explicit entry => dnsmasq answers *.localhost too
+
+[proxy]
+max_body_size = "0"     # no cap on request bodies; "64m" to cap, "" = angie's default (1 MiB)
 
 [resolv]
 enabled = true          # writes /etc/resolver/docker, /etc/resolver/test, ...
