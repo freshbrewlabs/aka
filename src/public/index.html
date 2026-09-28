@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#0e0e10" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%2318181b'/%3E%3Ctext x='32' y='43' font-family='monospace' font-size='34' font-weight='bold' text-anchor='middle' fill='%23d4872a'%3Ea%3C/text%3E%3C/svg%3E" />
+<title>aka — your development proxy for docker</title>
+<meta name="description" content="aka turns Docker containers into hostnames. Set VIRTUAL_HOST, run aka up, open http://that-host.docker — HTTP, HTTPS, TLS passthrough and raw TCP, with no sudo prompts." />
+<meta property="og:title" content="aka — your development proxy for docker" />
+<meta property="og:description" content="Containers become hostnames. HTTP vhosts, TLS passthrough and raw TCP routes. A Rust successor to dory." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0e0e10;
+    --surface: #18181b;
+    --fg: #f0efed;
+    --fg-dim: #8a8a8e;
+    --fg-muted: #555559;
+    --accent: #d4872a;
+    --border: rgba(255, 255, 255, 0.06);
+    --font-display: "Iowan Old Style", "Charter", Georgia, serif;
+    --font-body: -apple-system, "Segoe UI", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", "IBM Plex Mono", "SF Mono", Menlo, monospace;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--fg);
+    background: var(--bg);
+    overflow-x: hidden;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Noise texture */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.04;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 256px 256px;
+  }
+
+  ::selection { background: var(--accent); color: #fff; }
+
+  a { color: var(--accent); text-decoration: none; transition: opacity 0.15s; }
+  a:hover { opacity: 0.8; }
+
+  /* ---- layout: everything centered ---- */
+  .page {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    padding: 64px 24px 32px;
+    text-align: center;
+  }
+
+  /* Radial glow behind the hero */
+  .hero {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+  }
+  .glow {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 900px;
+    height: 1100px;
+    background: radial-gradient(ellipse at center, rgba(212, 135, 42, 0.08) 0%, transparent 70%);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+
+  /* ---- header ---- */
+  header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+  .wordmark {
+    font-family: var(--font-mono); font-weight: 700; font-size: 20px;
+    color: var(--fg);
+  }
+  .wordmark .prompt { color: var(--accent); }
+  nav { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 22px; }
+  nav a { color: var(--fg-dim); font-size: 14px; }
+  nav a:hover { color: var(--fg); }
+
+  /* ---- hero ---- */
+  .headline {
+    font-family: var(--font-display);
+    font-size: clamp(42px, 7vw, 80px);
+    line-height: 1.05;
+    font-weight: 400;
+    letter-spacing: -0.03em;
+    color: var(--fg);
+    max-width: 22ch;
+    margin-top: 56px;
+    margin-bottom: 32px;
+  }
+  .headline em { color: var(--accent); }
+  .sub {
+    font-size: clamp(15px, 1.8vw, 18px);
+    color: var(--fg-dim);
+    max-width: 56ch;
+    line-height: 1.6;
+  }
+  .sub strong { color: var(--fg); font-weight: 600; }
+
+  /* ---- inline code ---- */
+  .install-note code, .sub code, .card code, td code {
+    font-family: var(--font-mono); font-size: 0.86em;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; padding: 1px 5px; color: var(--fg);
+  }
+
+  /* ---- code blocks ---- */
+  .code {
+    position: relative;
+    background: #101013;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    max-width: 720px;
+    margin: 0 auto;
+    text-align: left;
+  }
+  .code pre {
+    margin: 0;
+    padding: 18px 72px 18px 20px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 1.7;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .code .c { color: var(--fg-muted); }       /* comment */
+  .code .p { color: var(--accent); }         /* prompt / flags */
+  .code .s { color: #9ece6a; }               /* string / url */
+  .copy {
+    position: absolute; top: 10px; right: 10px;
+    background: var(--surface); color: var(--fg-dim);
+    border: 1px solid var(--border); border-radius: 6px;
+    font-family: var(--font-mono); font-size: 11px;
+    padding: 4px 10px; cursor: pointer;
+  }
+  .copy:hover { color: var(--fg); }
+
+  /* ---- sections ---- */
+  section { padding-top: 64px; width: 100%; }
+  section > h2 {
+    font-family: var(--font-mono);
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.12em;
+    color: var(--fg-muted); font-weight: 600; margin-bottom: 22px;
+  }
+  .install-note {
+    margin-top: 16px; color: var(--fg-dim); font-size: 14px;
+    max-width: 62ch; margin-left: auto; margin-right: auto;
+  }
+
+  /* ---- features ---- */
+  .grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+    max-width: 760px; margin: 0 auto; text-align: center;
+  }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px 20px;
+  }
+  .card h3 { font-size: 15px; margin-bottom: 6px; }
+  .card h3 .t { color: var(--accent); font-family: var(--font-mono); }
+  .card p { color: var(--fg-dim); font-size: 14px; }
+
+  /* ---- commands ---- */
+  .cmds {
+    display: inline-grid; grid-template-columns: auto auto;
+    gap: 4px 22px; text-align: left;
+    font-family: var(--font-mono); font-size: 14px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px 24px;
+  }
+  .cmds .cmd { color: var(--accent); white-space: pre; text-align: right; }
+  .cmds .desc { color: var(--fg-dim); font-family: var(--font-body); }
+
+  /* ---- footer ---- */
+  footer {
+    padding: 32px 24px;
+    text-align: center;
+    border-top: 1px solid var(--border);
+  }
+  .footer-copy {
+    font-family: var(--font-mono);
+    font-size: 11px; letter-spacing: 0.04em;
+    color: var(--fg-muted);
+  }
+
+  /* ---- responsive ---- */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  @media (max-width: 600px) {
+    body { font-size: 15px; }
+    .page { padding: 48px 20px 24px; }
+    .headline { font-size: clamp(36px, 9vw, 56px); margin-top: 40px; margin-bottom: 24px; }
+    .sub { font-size: 14px; }
+    .grid { grid-template-columns: 1fr; }
+    section { padding-top: 48px; }
+  }
+</style>
+</head>
+<body>
+<main class="page">
+
+  <header>
+    <span class="wordmark"><span class="prompt">$</span> aka</span>
+    <nav>
+      <a href="#install">Install</a>
+      <a href="#quickstart">Quick start</a>
+      <a href="#features">Features</a>
+      <a href="https://github.com/freshbrewlabs/aka">GitHub</a>
+    </nav>
+  </header>
+
+  <div class="hero">
+    <div class="glow" aria-hidden="true"></div>
+    <h1 class="headline">Your containers, reachable by <em>hostname</em>.</h1>
+    <p class="sub">
+      <strong>aka</strong> is your development proxy for docker. Set
+      <code>VIRTUAL_HOST</code> on a container, run <code>aka up</code>, open
+      <code>http://that-host.docker</code>. HTTP vhosts, TLS passthrough and
+      <strong>raw TCP</strong> routes — a Rust spiritual successor to
+      <a href="https://github.com/FreedomBen/dory">dory</a>, built on
+      <a href="https://angie.software">angie</a>.
+    </p>
+  </div>
+
+  <section id="install">
+    <h2>Install</h2>
+    <div class="code"><button class="copy" data-target="install-cmd">copy</button><pre><span id="install-cmd"><span class="p">curl</span> -fsSL <span class="s">https://raw.githubusercontent.com/freshbrewlabs/aka/main/install.sh</span> | bash</span></pre></div>
+    <p class="install-note">
+      Needs <code>git</code>, a running Docker, and Rust (<code>cargo</code>) —
+      the script checks all three. Builds the managed proxy/DNS images, installs
+      the <code>aka</code> binary into <code>~/.cargo/bin</code>, writes a
+      commented <code>~/.aka.toml</code>. Nothing needs sudo. Pin a version with
+      <code>AKA_REF=v1.2.3</code>; re-run any time to update.
+    </p>
+  </section>
+
+  <section id="quickstart">
+    <h2>Quick start</h2>
+    <div class="code"><button class="copy" data-target="qs-cmd">copy</button><pre><span id="qs-cmd"><span class="c"># one-time: passwordless sudoers rule so `aka up` never prompts</span>
+<span class="p">aka</span> install-sudo-rule
+
+<span class="c"># any running container with VIRTUAL_HOST is routed automatically</span>
+<span class="p">docker</span> run -d -e VIRTUAL_HOST=demo nginx
+
+<span class="p">aka</span> up
+<span class="p">curl</span> http://demo.docker          <span class="c"># -> nginx welcome page</span>
+<span class="p">aka</span> status</span></pre></div>
+  </section>
+
+  <section id="features">
+    <h2>What it does</h2>
+    <div class="grid">
+      <div class="card">
+        <h3><span class="t">http / https</span> vhosts</h3>
+        <p>Host-header routing on :80 with websocket upgrades; proxy to HTTPS
+        backends when you set <code>VIRTUAL_PROTO</code>.</p>
+      </div>
+      <div class="card">
+        <h3><span class="t">tls</span> + <span class="t">tcp</span> routes</h3>
+        <p>SNI passthrough on :443 and raw TCP ports published on the host —
+        <code>redis-cli -h cache.docker</code> just works.</p>
+      </div>
+      <div class="card">
+        <h3>Multiple TLDs</h3>
+        <p><code>.docker</code>, <code>.test</code>, whatever you like — each
+        domain and all its subdomains resolve to your proxy.</p>
+      </div>
+      <div class="card">
+        <h3>No sudo, no prompts</h3>
+        <p>One audited sudoers rule lets aka manage
+        <code>/etc/resolver</code> entries itself. Remove it any time.</p>
+      </div>
+      <div class="card">
+        <h3>dory-compatible</h3>
+        <p>Same <code>VIRTUAL_HOST</code> / <code>VIRTUAL_PORT</code> /
+        <code>VIRTUAL_PROTO</code> variables and labels — existing containers
+        need no changes.</p>
+      </div>
+      <div class="card">
+        <h3>Zero-restart discovery</h3>
+        <p>A daemon watches docker events; new containers are routed live,
+        no proxy reload, no container restarts.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="commands">
+    <h2>Commands</h2>
+    <div class="cmds">
+      <span class="cmd">aka up</span>          <span class="desc">start dns + proxy + host resolver</span>
+      <span class="cmd">aka down</span>        <span class="desc">stop everything, clean up resolver entries</span>
+      <span class="cmd">aka status</span>      <span class="desc">container states, daemon health, route table</span>
+      <span class="cmd">aka routes</span>      <span class="desc">discovered routes (--json)</span>
+      <span class="cmd">aka logs</span>        <span class="desc">follow dns / proxy container logs</span>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p class="footer-copy">aka — by <a href="https://freshbrewlabs.com">Freshbrew Labs</a> · <a href="https://github.com/freshbrewlabs/aka">github.com/freshbrewlabs/aka</a> · © <span id="copy-year"></span></p>
+</footer>
+
+<script>
+  document.getElementById('copy-year').textContent = new Date().getFullYear();
+  document.querySelectorAll('.copy').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var text = document.getElementById(btn.dataset.target).innerText;
+      navigator.clipboard.writeText(text).then(function () {
+        btn.textContent = 'copied';
+        setTimeout(function () { btn.textContent = 'copy'; }, 1500);
+      });
+    });
+  });
+</script>
+</body>
+</html>

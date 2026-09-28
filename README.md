@@ -66,7 +66,7 @@ Names are compatible with dory / nginx-proxy, so existing containers just work.
 
 | Key | Default | Meaning |
 |-----|---------|---------|
-| `VIRTUAL_HOST` | — | comma-separated hostnames; presence enables routing |
+| `VIRTUAL_HOST` | — | hostnames separated by commas and/or spaces; presence enables routing |
 | `VIRTUAL_PORT` | first exposed port, else `80` | backend port |
 | `VIRTUAL_PROTO` | `http` | `http`, `https`, `tls`, or `tcp` |
 
@@ -211,6 +211,8 @@ docker is the datastore.
 bin/build.sh       # docker images (devops/docker/aka-proxy, aka-dns)
 bin/unit_test.sh   # cargo test --workspace
 cargo run -p aka-cli -- up -c ./dev.yml   # dev loop; AKA_HOME=./.aka-dev
+docker compose up -d public-web   # landing page -> http://www.parkinglot.localhost / :8080 direct
+                                   # (site lives in src/public/; prod = static host on that dir)
 ```
 
 Unit tests cover discovery, renderers (golden fragments + map-line shape),

@@ -1,0 +1,20 @@
+# public stack: serves the landing page (index.html here) as a static site.
+#
+#   docker compose up -d public-web     # -> http://www.parkinglot.localhost (with aka up),
+                                        #    or http://localhost:${PUBLIC_PORT:-8080} direct
+#
+# Production is a static host (Cloudflare Pages / GitHub Pages) pointed at
+# src/public/ as the site root; this compose service is for local preview only.
+
+name: aka
+
+services:
+  public-web:
+    image: nginx:alpine
+    environment:
+      VIRTUAL_HOST: www.parkinglot.localhost
+      VIRTUAL_PORT: "80"
+    volumes:
+      - .:/usr/share/nginx/html:ro
+    ports:
+      - "${PUBLIC_PORT:-8080}:80"

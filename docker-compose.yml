@@ -6,6 +6,7 @@
 #   - ./src/app/docker-compose.yml
 include:
   - ./src/aka/docker-compose.yml
+  - ./src/public/docker-compose.yml
 
 volumes:
   shared-vol:

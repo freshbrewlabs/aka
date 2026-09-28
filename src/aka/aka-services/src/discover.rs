@@ -38,6 +38,17 @@ fn raw_field<'a>(summary: &'a ContainerSummary, label: &str, env: &str) -> Optio
         .filter(|v| !v.is_empty())
 }
 
+/// Hosts in `VIRTUAL_HOST`/`aka.host` may be separated by commas and/or
+/// whitespace (compose `VIRTUAL_HOST: a.docker b.docker` is one plain string).
+fn split_hosts(raw: &str) -> Vec<String> {
+    raw.split(|c: char| c == ',' || c.is_whitespace())
+        .map(str::to_ascii_lowercase)
+        .filter(|h| !h.is_empty())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
 struct Declaration {
     container: String,
     hosts: Vec<String>,
@@ -86,13 +97,7 @@ pub fn discover(
 
 /// Parse one container's declaration; push problem notes into `conflicts`.
 fn declare(summary: &ContainerSummary, conflicts: &mut Vec<String>) -> Option<Declaration> {
-    let hosts = raw_field(summary, LABEL_HOST, ENV_HOST)?
-        .split(',')
-        .map(|h| h.trim().to_ascii_lowercase())
-        .filter(|h| !h.is_empty())
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect::<Vec<_>>();
+    let hosts = split_hosts(raw_field(summary, LABEL_HOST, ENV_HOST)?);
 
     if hosts.is_empty() {
         conflicts.push(format!(
@@ -333,13 +338,7 @@ pub fn declared_hosts(summaries: &[ContainerSummary], cfg: &AkaConfig) -> Vec<St
     summaries
         .iter()
         .filter(|s| s.state == "running" && !is_managed(&s.name, cfg) && declares_routes(s))
-        .flat_map(|s| {
-            raw_field(s, LABEL_HOST, ENV_HOST)
-                .unwrap_or_default()
-                .split(',')
-                .map(|h| h.trim().to_ascii_lowercase())
-                .filter(|h| !h.is_empty())
-        })
+        .flat_map(|s| split_hosts(raw_field(s, LABEL_HOST, ENV_HOST).unwrap_or_default()))
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect()
@@ -456,6 +455,29 @@ mod tests {
         let hosts: Vec<&str> = table.http.iter().map(|r| r.hosts[0].as_str()).collect();
         assert_eq!(hosts, vec!["label.docker", "second.docker"]);
         assert!(table.conflicts.is_empty());
+    }
+
+    #[test]
+    fn comma_and_space_hosts_both_split() {
+        let containers = vec![container(
+            "web",
+            "172.20.0.5",
+            "running",
+            &[
+                ("VIRTUAL_HOST", "a.docker  b.docker,\tc.docker"),
+                ("VIRTUAL_PORT", "3000"),
+            ],
+            &[],
+        )];
+        let table = discover(&containers, &AkaConfig::default(), &Default::default());
+
+        let hosts: Vec<&str> = table.http.iter().map(|r| r.hosts[0].as_str()).collect();
+        assert_eq!(hosts, vec!["a.docker", "b.docker", "c.docker"]);
+        assert!(table.conflicts.is_empty());
+        assert_eq!(
+            declared_hosts(&containers, &AkaConfig::default()),
+            vec!["a.docker", "b.docker", "c.docker"]
+        );
     }
 
     #[test]
