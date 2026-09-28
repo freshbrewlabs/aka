@@ -12,8 +12,12 @@ NC='\033[0m' # No Color
 echo "running all build files..."
 echo ""
 
-# Find all build.sh files and execute them
-find ./src -type f -name "build.sh" -print0 | while IFS= read -r -d '' file; do
+# Find all build.sh files and execute them. One stack failing must not stop the
+# others: under `set -e` a failing subshell aborts the loop before the ✗ line
+# ever prints, hence the `|| exit_code=$?`.
+failures=""
+
+while IFS= read -r -d '' file; do
     echo -e "${YELLOW}================================================================================${NC}"
     echo -e "${GREEN}Executing: $file${NC}"
 
@@ -24,18 +28,23 @@ find ./src -type f -name "build.sh" -print0 | while IFS= read -r -d '' file; do
     chmod +x "$file"
 
     # Execute the file from its directory
-    (cd "$file_dir" && bash "./$(basename "$file")")
+    exit_code=0
+    (cd "$file_dir" && bash "./$(basename "$file")") || exit_code=$?
 
-    exit_code=$?
-
-    if [ $exit_code -eq 0 ]; then
+    if [ "$exit_code" -eq 0 ]; then
         echo -e "${GREEN}✓ Successfully executed: $file${NC}"
     else
         echo -e "${RED}✗ Failed to execute: $file (exit code: $exit_code)${NC}"
+        failures="$failures $file"
     fi
     echo ""
     echo -e "${YELLOW}================================================================================${NC}"
-done
+done < <(find ./src -type f -name "build.sh" -print0)
+
+if [ -n "$failures" ]; then
+    echo -e "${RED}build.sh: failed:$failures${NC}" >&2
+    exit 1
+fi
 
 echo ""
 echo -e "${GREEN}All build.sh files have been processed.${NC}"

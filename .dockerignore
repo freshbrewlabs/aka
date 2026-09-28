@@ -1,0 +1,11 @@
+# The aka-admin image builds from the repo root (admin-api depends on aka's own
+# crates), so the context has to stay lean: nothing the image regenerates
+# itself, and nothing that is not source.
+.git
+**/target
+**/dist
+**/*.log
+.env
+*.env
+.aka-dev
+.aka.toml

@@ -1,0 +1,9 @@
+[package]
+name = "admin-http"
+version = "0.1.1"
+edition = "2024"
+
+[dependencies]
+admin-kernel = { path = "../admin-kernel" }
+
+serde = { version = "1.0.228", features = ["derive"] }

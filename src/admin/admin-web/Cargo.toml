@@ -1,0 +1,18 @@
+[package]
+name = "admin-web"
+version = "0.1.1"
+edition = "2024"
+
+[[bin]]
+name = "admin-web"
+path = "src/main.rs"
+
+[dependencies]
+admin-rs = { path = "../admin-rs" }
+admin-kernel = { path = "../admin-kernel" }
+http = { path = "../../xlib/http" }
+leptos = { version = "0.8.15", features = ["csr"] }
+leptos_router = { version = "0.8.11" }
+web-sys = { version = "0.3.83", features = ["Window"] }
+gloo-timers = { version = "0.3", features = ["futures"] }
+wasm-bindgen-futures = "0.4"

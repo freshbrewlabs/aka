@@ -1,0 +1,134 @@
+# admin stack: the local, unauthenticated dashboard for `aka status`, served at
+# `aka.<your tld>` — aka.docker by default, aka.test / aka.localhost if you add
+# those domains to aka's config.
+#
+#   docker compose build --profile images aka-admin   # once, or: bash src/admin/build.sh
+#   docker compose up -d admin                        # from the project root
+#   open http://aka.docker          (through aka itself)
+#   open http://localhost:3001      (direct; the view you want when aka is down)
+#
+# One container runs both halves: the `aka-admin` image is the axum API and the
+# dashboard build it serves, so the page and `/api/v1/*` share one origin.
+#
+# No authentication anywhere, by design: this stack runs on your own machine,
+# reads aka's own state and shows it. It has no database, no users and no
+# secrets — the whole point is to look at aka without ceremony.
+#
+# What admin-api reads, and what it therefore mounts:
+#
+#   * the docker engine      -> ${DOCKER_SOCKET:-/var/run/docker.sock}
+#   * aka's runtime home     -> ${HOME}/.aka  (state.json, proxyd.pid), read-only,
+#     at AKA_HOME=/aka/home
+#   * aka's config           -> aka's own discovery inside the container finds
+#     nothing (no cwd config, no ~/.aka.toml), so the built-in defaults apply:
+#     container names aka_proxy/aka_dns, image tags latest. If your ~/.aka.toml
+#     changes those, mount it and point at it:
+#       - ${HOME}/.aka.toml:/aka/config.toml:ro   +   AKA_CONFIG: /aka/config.toml
+#
+# Every published port binds to 127.0.0.1 only, so this API is never reachable
+# from the LAN — which is what makes "no auth at all" an acceptable choice.
+#
+# Paths are relative to this file (src/admin/), so the project root is ../../.
+# Include it from the project root to run:
+#
+#   include:
+#     - ./src/admin/docker-compose.yml
+#
+# Two extra profiles:
+#
+#   --profile images    the build-only entry that produces the aka-admin image
+#                       (also reachable through src/admin/build.sh / bin/build.sh)
+#   --profile dev       source-mounted hot-reload pair instead of the image:
+#                         docker compose --profile dev up -d admin-api admin-web
+#                       trunk then serves the dev bundle on :3002 with
+#                       ADMIN_API_URL baked to http://localhost:3000. Stop
+#                       `admin` first: both claim the aka.* virtual hosts.
+
+services:
+  # Build-only: `docker compose build --profile images aka-admin`, which is what
+  # src/admin/build.sh does with a plain `docker build` (same tag, same context).
+  aka-admin:
+    build:
+      context: ../../
+      dockerfile: devops/docker/aka-admin/Dockerfile
+      args:
+        RUST_DEV_IMAGE_VERSION: $RUST_DEV_IMAGE_VERSION
+        DEBIAN_SLIM_BASE_IMAGE_VERSION: $DEBIAN_SLIM_BASE_IMAGE_VERSION
+    image: ${HUB_NAMESPACE:-dewey4iv}/aka-admin:${TAG:-latest}
+    platform: $DOCKER_PLATFORM
+    profiles: ["images"]
+
+  # The dashboard: UI + API on one port, one origin.
+  admin:
+    image: ${HUB_NAMESPACE:-dewey4iv}/aka-admin:${TAG:-latest}
+    platform: $DOCKER_PLATFORM
+    restart: unless-stopped
+    environment:
+      # aka.<domain> for every domain aka serves; aka's own default domain is
+      # `docker`, so add the rest: ADMIN_HOSTS=aka.docker,aka.test,aka.localhost
+      VIRTUAL_HOST: ${ADMIN_HOSTS:-aka.docker}
+      VIRTUAL_PORT: "80"
+      AKA_HOME: /aka/home
+      PORT: "80"
+      RUST_LOG: ${RUST_LOG:-INFO}
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+    ports:
+      - "127.0.0.1:${ADMIN_PORT:-3001}:80"
+    volumes:
+      - ${HOME}/.aka:/aka/home:ro
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+
+  # --- dev: source-mounted, hot-reloading, no image build ------------------
+  # watchexec rebuilds the API; trunk serves the dev bundle. The web container
+  # compiles ADMIN_API_URL in, because trunk and the API are different origins
+  # here (unlike the image, where one port serves both).
+
+  admin-api:
+    working_dir: /home/rust/src/admin
+    command: /bin/bash -c 'watchexec -c -e rs -r cargo run --bin admin-api'
+    image: registry.vizerapp.cloud/lib/rust-dev:$RUST_DEV_IMAGE_VERSION
+    platform: $DOCKER_PLATFORM
+    stdin_open: true
+    tty: true
+    profiles: ["dev"]
+    environment:
+      CARGO_TARGET_DIR: /home/rust/shared_target
+      VIRTUAL_HOST: ${ADMIN_API_HOSTS:-aka-api.docker}
+      # aka's runtime home, from the host (see the volumes below)
+      AKA_HOME: /aka/home
+    env_file:
+      - ../../.env
+    ports:
+      - "127.0.0.1:${ADMIN_API_PORT:-3000}:80"
+    volumes:
+      - "shared-vol:/home/rust/shared_target"
+      - ../../:/home/rust/src/admin:cached
+      - ${HOME}/.aka:/aka/home:ro
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+
+  admin-web:
+    working_dir: /home/rust/src/admin/src/admin/admin-web
+    command: /bin/bash -c 'trunk serve'
+    build:
+      context: ../../
+      dockerfile: devops/docker/stylance/Dockerfile
+      args:
+        TARGETVERSION: $RUST_DEV_IMAGE_VERSION
+    platform: $DOCKER_PLATFORM
+    stdin_open: true
+    tty: true
+    depends_on:
+      - admin-api
+    profiles: ["dev"]
+    environment:
+      CARGO_TARGET_DIR: /home/rust/shared_target
+      VIRTUAL_HOST: ${ADMIN_HOSTS:-aka.docker}
+      # baked into the wasm bundle at compile time (option_env!)
+      ADMIN_API_URL: http://localhost:${ADMIN_API_PORT:-3000}
+    env_file:
+      - ../../.env
+    ports:
+      - "127.0.0.1:${ADMIN_WEB_PORT:-3002}:80"
+    volumes:
+      - "shared-vol:/home/rust/shared_target"
+      - ../../:/home/rust/src/admin:cached

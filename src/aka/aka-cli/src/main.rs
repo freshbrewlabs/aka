@@ -67,6 +67,12 @@ enum Commands {
     /// Install the sudoers rule that makes `aka up`/`aka down` sudo-free
     /// (a one-time sudo; the rule is scoped to aka's own `_privileged` verb)
     InstallSudoRule,
+    /// Rebuild and reinstall the aka binary from the repo (cargo install)
+    Update {
+        /// Git ref (branch or tag) to update from (default: main, or AKA_REF)
+        #[arg(long = "ref")]
+        git_ref: Option<String>,
+    },
     /// Report the installed version
     Version,
     /// Internal proxy daemon (spawned by `aka up`)
@@ -151,6 +157,7 @@ async fn main() -> Result<(), aka_kernel::BoxedError> {
         Commands::Routes { json } => commands::routes(&provider, json),
         Commands::ConfigFile { force, upgrade } => commands::config_file(&provider, force, upgrade),
         Commands::InstallSudoRule => commands::install_sudo_rule(),
+        Commands::Update { git_ref } => commands::update(&provider, git_ref.as_deref()),
         Commands::Version => commands::version(),
         Commands::Proxyd => commands::proxyd(&provider).await,
         Commands::Privileged { cmd } => commands::privileged(cmd),

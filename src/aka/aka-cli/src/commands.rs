@@ -486,6 +486,136 @@ pub fn install_sudo_rule() -> Result<(), BoxedError> {
     aka_services::privileged::install_sudo_rule()
 }
 
+// ------------------------------------------------------------------ update
+
+/// The canonical install repo; `AKA_REPO` overrides it (same knob as install.sh).
+const AKA_REPO: &str = "https://github.com/freshbrewlabs/aka.git";
+
+/// `git clone` parses any leading-dash argument as an option (`--upload-pack`
+/// runs a command), so a ref only gets these characters, never `..`.
+fn valid_git_ref(git_ref: &str) -> bool {
+    !git_ref.is_empty()
+        && !git_ref.starts_with('-')
+        && !git_ref.contains("..")
+        && git_ref
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '/' | '-'))
+}
+
+fn tool_present(program: &str) -> bool {
+    Command::new(program)
+        .arg("--version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// Run a tool with inherited stdio (the user watches cargo compile).
+fn run(program: &str, args: &[&str], cwd: Option<&std::path::Path>) -> Result<(), BoxedError> {
+    let mut command = Command::new(program);
+    command.args(args);
+    if let Some(cwd) = cwd {
+        command.current_dir(cwd);
+    }
+    let status = command.status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("{program} exited with {status}").into())
+    }
+}
+
+/// Where `cargo install` puts the aka binary: install root (cargo's own
+/// env-var order) with `bin/aka` underneath it.
+fn installed_bin() -> PathBuf {
+    let root = std::env::var("CARGO_INSTALL_ROOT")
+        .or_else(|_| std::env::var("CARGO_HOME"))
+        .unwrap_or_else(|_| std::env::var("HOME").unwrap_or_else(|_| "~".into()) + "/.cargo");
+    PathBuf::from(root).join("bin").join("aka")
+}
+
+fn installed_version(bin: &std::path::Path) -> Option<String> {
+    let out = Command::new(bin).arg("version").output().ok()?;
+    let text = String::from_utf8(out.stdout).ok()?;
+    let text = text.trim().to_string();
+    (!text.is_empty()).then(|| text.trim_start_matches("aka ").to_string())
+}
+
+/// Reinstall aka from the repo: clone the ref to a temp dir, then the exact
+/// `cargo install --path src/aka/aka-cli --locked --force` bin/install.sh
+/// runs. Same version or not, the binary is replaced; cargo removing a
+/// running binary is fine on unix, and the path does not change, so the
+/// sudoers rule keeps pointing at the new one.
+pub fn update(provider: &Provider, git_ref: Option<&str>) -> Result<(), BoxedError> {
+    let paths = provider.fetch_unchecked::<AkaPaths>();
+    let git_ref = git_ref
+        .map(str::to_string)
+        .or_else(|| std::env::var("AKA_REF").ok())
+        .unwrap_or_else(|| "main".into());
+    if !valid_git_ref(&git_ref) {
+        return Err(format!(
+            "invalid git ref {git_ref:?} (a branch or tag: letters, digits, . _ / -)"
+        )
+        .into());
+    }
+    if !tool_present("git") {
+        return Err(
+            "git is required; macOS: xcode-select --install, Debian/Ubuntu: sudo apt install git"
+                .into(),
+        );
+    }
+    if !tool_present("cargo") {
+        return Err("cargo (Rust) is required to update aka; install it with: \
+             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+            .into());
+    }
+
+    let repo = std::env::var("AKA_REPO").unwrap_or_else(|_| AKA_REPO.into());
+    let was = env!("CARGO_PKG_VERSION");
+    let clone = std::env::temp_dir().join(format!("aka-update-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&clone);
+
+    println!("==> updating aka from {repo} ({git_ref}); a cold build takes a few minutes");
+    let step = (|| -> Result<(), BoxedError> {
+        let dest = clone.to_string_lossy();
+        run(
+            "git",
+            &[
+                "clone", "--quiet", "--depth", "1", "--branch", &git_ref, &repo, &dest,
+            ],
+            None,
+        )?;
+        run(
+            "cargo",
+            &[
+                "install",
+                "--path",
+                "src/aka/aka-cli",
+                "--locked",
+                "--force",
+            ],
+            Some(&clone),
+        )
+    })();
+    let _ = std::fs::remove_dir_all(&clone);
+    step?;
+
+    match installed_version(&installed_bin()).as_deref() {
+        Some(now) if now != was => {
+            println!("==> aka updated {was} -> {now}");
+            println!("the images may have moved too: aka pull");
+        }
+        Some(now) => println!("==> aka {now} reinstalled from {git_ref}"),
+        None => println!("==> aka reinstalled; run `aka version` to see the new version"),
+    }
+    if let Some(pid) = daemon_pid(&paths.pid_file()) {
+        println!("proxyd (pid {pid}) still runs the old binary: aka restart");
+    }
+    Ok(())
+}
+
 // ------------------------------------------------------------------ proxyd
 
 pub async fn proxyd(provider: &Provider) -> Result<(), BoxedError> {
@@ -563,4 +693,21 @@ async fn ensure_port_free(
     }
     println!("port {port} freed ({label})");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::valid_git_ref;
+
+    #[test]
+    fn git_refs_that_git_would_read_as_options_are_rejected() {
+        assert!(valid_git_ref("main"));
+        assert!(valid_git_ref("v1.2.3"));
+        assert!(valid_git_ref("feature/add-update"));
+        assert!(!valid_git_ref(""));
+        assert!(!valid_git_ref("--upload-pack=evil"));
+        assert!(!valid_git_ref("-b"));
+        assert!(!valid_git_ref("a..b"));
+        assert!(!valid_git_ref("v1 ; rm -rf /"));
+    }
 }

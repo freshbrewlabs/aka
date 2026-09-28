@@ -6,11 +6,11 @@ set -euo pipefail
 #   curl -fsSL https://raw.githubusercontent.com/freshbrewlabs/aka/main/install.sh | bash
 #
 # Checks prerequisites, clones the repo into a temp dir, and hands off to the
-# repo's real installer (bin/install.sh): builds the two managed docker
-# images, cargo installs the `aka` binary into ~/.cargo/bin, and writes a
-# commented ~/.aka.toml if you don't have one (never overwrites). Nothing
-# here needs sudo. First run compiles aka from source, so give it a few
-# minutes; docker image builds use the layer cache.
+# repo's real installer (bin/install.sh): cargo installs the `aka` binary into
+# ~/.cargo/bin and writes a commented ~/.aka.toml if you don't have one (never
+# overwrites). Nothing here needs sudo, and no docker images are built — run
+# `aka pull` once afterwards to fetch the published aka-proxy/aka-dns images.
+# First run compiles aka from source, so give it a few minutes.
 #
 # Pick the git ref (branch or tag) to install:
 #
