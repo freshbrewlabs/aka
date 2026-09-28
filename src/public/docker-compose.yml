@@ -12,7 +12,7 @@ services:
   public-web:
     image: nginx:alpine
     environment:
-      VIRTUAL_HOST: www.parkinglot.localhost
+      VIRTUAL_HOST: www.aka.localhost
       VIRTUAL_PORT: "80"
     volumes:
       - .:/usr/share/nginx/html:ro
