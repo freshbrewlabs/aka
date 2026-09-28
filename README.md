@@ -10,12 +10,18 @@ using [angie](https://angie.software) (an nginx fork with a first-class
 ## Install
 
 ```bash
-bin/install.sh
+curl -fsSL https://raw.githubusercontent.com/freshbrewlabs/aka/main/install.sh | bash
 ```
 
-Builds the two managed images, `cargo install`s the `aka` binary into
-`~/.cargo/bin`, and writes a commented `~/.aka.toml` if you don't have one
-(never overwrites). Re-run any time — image builds are cached.
+Needs git, a running Docker, and Rust/cargo — the script checks all three
+and tells you what's missing. It clones the repo to a temp dir, builds the
+two managed images, `cargo install`s the `aka` binary into `~/.cargo/bin`,
+and writes a commented `~/.aka.toml` if you don't have one (never
+overwrites). Nothing needs sudo. Re-run any time to update; first run
+compiles aka from source (a few minutes), image builds hit the docker layer
+cache. Pin a branch or tag with `... | AKA_REF=v1.2.3 bash`.
+
+Already have a clone? `bin/install.sh` does the same steps in place.
 
 ## Quick start
 

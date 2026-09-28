@@ -1,13 +1,17 @@
 #!/bin/bash
 set -euo pipefail
 
-# Install aka locally: the two managed docker images, the `aka` binary into
-# ~/.cargo/bin, and a commented ~/.aka.toml (an existing config is never
-# overwritten). Safe to re-run; nothing here needs sudo. Running `aka
-# install-sudo-rule` once is what makes day-to-day `aka up`/`aka down`
-# sudo-free (without it they prompt for a password).
+# Install aka from this checkout — run directly, or let the repo-root
+# install.sh one-liner clone the repo and call this. Installs: the two
+# managed docker images, the `aka` binary into ~/.cargo/bin, and a commented
+# ~/.aka.toml (an existing config is never overwritten). Safe to re-run;
+# nothing here needs sudo. Running `aka install-sudo-rule` once is what
+# makes day-to-day `aka up`/`aka down` sudo-free (without it they prompt
+# for a password).
 
 cd "$(dirname "$0")/.."
+
+export PATH="$HOME/.cargo/bin:$PATH"  # a just-installed rustup isn't on PATH yet
 
 command -v docker >/dev/null || { echo "docker is required" >&2; exit 1; }
 docker info >/dev/null 2>&1 || { echo "docker daemon is not running" >&2; exit 1; }
