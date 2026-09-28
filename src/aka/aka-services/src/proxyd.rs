@@ -15,7 +15,10 @@ use futures::{Stream, StreamExt};
 use tokio::time::{Duration, interval, timeout};
 use tracing::{error, info, warn};
 
-use crate::angie::{HTTP_FILENAME, STREAM_FILENAME, render_http, render_stream};
+use crate::angie::{
+    DOWN_INCLUDE_FILENAME, HTTP_FILENAME, STREAM_FILENAME, render_down_include, render_http,
+    render_stream,
+};
 use crate::certs::find_cert_pairs;
 use crate::discover::{declares_routes, discover};
 use crate::lifecycle;
@@ -186,14 +189,19 @@ impl Proxyd {
     }
 
     fn write_configs(&mut self, table: &RouteTable) -> Result<bool, BoxedError> {
+        let down = render_down_include(admin_dashboard_url(&self.cfg).as_deref());
         let http = render_http(table, &self.cfg.proxy);
         let stream = render_stream(table, &self.cfg.proxy);
-        let fingerprint = format!("{http}\u{1}{stream}");
+        let fingerprint = format!("{http}\u{1}{stream}\u{1}{down}");
 
         if fingerprint == self.last_render {
             return Ok(false);
         }
 
+        // The http config `include`s the down page by path, so write the
+        // include first: a reload or container start must never see a
+        // dangling include.
+        write_in_place(&self.paths.http_dir().join(DOWN_INCLUDE_FILENAME), &down)?;
         write_in_place(&self.paths.http_dir().join(HTTP_FILENAME), &http)?;
         write_in_place(&self.paths.stream_dir().join(STREAM_FILENAME), &stream)?;
         self.last_render = fingerprint;
@@ -243,6 +251,16 @@ async fn drain_burst<S: Stream<Item = aka_docker::bollard::models::EventMessage>
     events: &mut S,
 ) {
     while let Ok(Some(_)) = timeout(Duration::from_millis(100), events.next()).await {}
+}
+
+/// The admin dashboard URL for the down page's link: the first admin vhost
+/// over plain http (the dashboard speaks http on the proxy), or nothing
+/// when the dashboard is disabled — the page then says so instead.
+fn admin_dashboard_url(cfg: &AkaConfig) -> Option<String> {
+    if !cfg.admin.enabled {
+        return None;
+    }
+    cfg.admin_hosts().first().map(|host| format!("http://{host}/"))
 }
 
 /// Overwrite the file contents without replacing the inode: the proxy
