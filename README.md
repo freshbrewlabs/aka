@@ -7,11 +7,20 @@ hostname: set `VIRTUAL_HOST` on a container, run `aka up`, open
 using [angie](https://angie.software) (an nginx fork with a first-class
 `stream` module) as the proxy image.
 
+## Install
+
+```bash
+bin/install.sh
+```
+
+Builds the two managed images, `cargo install`s the `aka` binary into
+`~/.cargo/bin`, and writes a commented `~/.aka.toml` if you don't have one
+(never overwrites). Nothing needs sudo; `aka up` prompts for it when it
+writes `/etc/resolver` files. Re-run any time — image builds are cached.
+
 ## Quick start
 
 ```bash
-bin/build.sh                          # builds aka-proxy:local + aka-dns:local
-cargo build                           # the aka binary
 docker compose -f src/aka/docker-compose.yml up -d demo-web demo-cache
 
 sudo aka up                           # first run: sudo to write /etc/resolver
