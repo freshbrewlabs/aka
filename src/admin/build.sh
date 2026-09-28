@@ -16,9 +16,9 @@ set -euo pipefail
 # Local platform only, and the pushed tag therefore names one architecture:
 # this is a Rust and wasm compile, not configuration on top of a published base,
 # so it is not cross-built the way aka-proxy/aka-dns are (src/aka/build.sh). The
-# dashboard stack is a single-machine dev tool — nothing pulls it automatically
-# (`aka pull` fetches aka-proxy/aka-dns only), and a machine of another arch
-# builds its own tag from source with this script. bin/build.sh runs every
+# dashboard stack is a single-machine dev tool — `aka pull` fetches it with the
+# other images, and the pushed :latest names one arch, so a machine of another
+# arch rebuilds the tag from source with this script. bin/build.sh runs every
 # src/**/build.sh, including this one.
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"

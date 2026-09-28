@@ -1,8 +1,9 @@
 //! Config file handling, mirroring dory: `~/.dory.yml` → `~/.aka.toml`,
 //! project-local `.aka.toml` searched from cwd upwards, defaults for anything
 //! the user did not set. TOML root = the `aka` table (dory's `dory:` root,
-//! minus the wrapper); sections `[dns]`, `[proxy]`, `[resolv]` map to dory's
-//! `dnsmasq`, `nginx_proxy` and `resolv`.
+//! minus the wrapper); sections `[dns]`, `[proxy]`, `[admin]`, `[resolv]`
+//! map to dory's `dnsmasq`, `nginx_proxy` and `resolv` (admin has no dory
+//! counterpart: it is the `aka status` web dashboard).
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -57,6 +58,16 @@ tls_port = 443
 ssl_certs_dir = ""           # host dir with <host>.crt/.key pairs to terminate TLS
 bind_ip = "127.0.0.1"
 restart = "unless-stopped"
+
+[admin]
+enabled = true                        # aka status as a web dashboard, run beside dns + proxy
+image = "dewey4iv/aka-admin:latest"   # the dashboard + its API in one image
+container_name = "aka_admin"
+host_port = 3001           # loopback port for direct access (http://localhost:3001)
+bind_ip = "127.0.0.1"      # the dashboard has no auth: never publish it on the LAN
+docker_socket = "/var/run/docker.sock"  # socket mounted for the dashboard's docker API
+# hosts = []               # vhosts the proxy routes to the dashboard;
+                           # empty = aka.<domain> for every [[dns.domains]] entry
 
 [resolv]
 enabled = true               # write /etc/resolver/<domain> files (macOS) or resolv.conf (linux)
@@ -183,6 +194,15 @@ mod tests {
         assert_eq!(cfg.proxy.container_name, "aka_proxy");
         assert_eq!(cfg.dns.domains.len(), 1, "commented extras stay out");
         assert_eq!(cfg.dns.domains[0].domain, "docker");
+        assert!(cfg.admin.enabled);
+        assert_eq!(cfg.admin.container_name, "aka_admin");
+        assert_eq!(cfg.admin.host_port, 3001);
+        assert_eq!(cfg.admin.docker_socket, "/var/run/docker.sock");
+        assert_eq!(
+            cfg.admin_hosts(),
+            vec!["aka.docker"],
+            "hosts derive from dns.domains"
+        );
         assert_eq!(cfg.resolv.port, Some(53));
         assert_eq!(cfg.dns.kill_others.answer(), None);
     }
@@ -217,6 +237,38 @@ tls_enabled = false
     }
 
     #[test]
+    fn admin_hosts_derive_per_domain_and_honour_override() {
+        let cfg = parse_config(
+            r##"
+[[dns.domains]]
+domain = "DOCKER"
+address = "127.0.0.1"
+[[dns.domains]]
+domain = "test"
+address = "127.0.0.1"
+[[dns.domains]]
+domain = "#"
+address = "127.0.0.1"
+"##,
+        )
+        .unwrap();
+        assert_eq!(
+            cfg.admin_hosts(),
+            vec!["aka.docker", "aka.test"],
+            "one aka.<domain> per served domain, catch-all excluded"
+        );
+
+        let cfg =
+            parse_config("[admin]\nhosts = [\"status.local\", \"aka.DOCKER\", \"aka.docker\"]\n")
+                .unwrap();
+        assert_eq!(
+            cfg.admin_hosts(),
+            vec!["aka.docker", "status.local"],
+            "explicit list wins, lowercased and deduplicated"
+        );
+    }
+
+    #[test]
     fn kill_others_answers() {
         let cfg = parse_config("[dns]\nkill_others = \"yes\"\n").unwrap();
         assert_eq!(cfg.dns.kill_others.answer(), Some(true));
@@ -244,7 +296,10 @@ tls_enabled = false
 
         assert_eq!(cfg.dns.port, 5353, "user value survives");
         assert_eq!(cfg.proxy.container_name, "aka_proxy", "new keys merged in");
-        assert_eq!(cfg.dns.domains[0].domain, "docker", "defaults restored");
+        assert_eq!(
+            cfg.admin.container_name, "aka_admin",
+            "[admin] merged into old files"
+        );
 
         std::fs::remove_dir_all(&dir).unwrap();
     }

@@ -4,6 +4,12 @@ A local web console for `aka status`, at `aka.<your tld>`: the managed
 containers, proxyd's health and the whole discovered route table, refreshed every
 5 seconds.
 
+This is a managed service, not a side stack: `aka pull` fetches the image and
+`aka up` runs it as `aka_admin` beside dns + proxy. The container declares
+`aka.<domain>` (per aka domain) as its own `VIRTUAL_HOST`, so the proxy routes
+the status page exactly like any other route. `[admin] enabled = false` in
+`~/.aka.toml` hands the job back to the compose files below.
+
 **No authentication of any kind, on purpose.** The stack reads aka's own state
 and shows it; it has no users, no sessions, no tokens and no database. The
 published ports bind to `127.0.0.1` only (see `docker-compose.yml`), so nothing
@@ -37,8 +43,9 @@ release API binary plus the release `trunk build` of the dashboard it serves.
 ## One container, one image
 
 `aka-admin` answers at `aka.<domain>` — `aka.docker` with aka's default config,
-`aka.test` / `aka.localhost` too once those domains are in `~/.aka.toml` (list
-them in `ADMIN_HOSTS`). One container, one port, so the page and the API share
+`aka.test` / `aka.localhost` too once those domains are configured — the
+managed container derives `aka.<domain>` from every `[[dns.domains]]` entry
+(`[admin] hosts` overrides). One container, one port, so the page and the API share
 an origin:
 
 | path | served by |
@@ -70,9 +77,10 @@ reads aka's state through aka's own crates, so the workspace has to be in the
 build (`.dockerignore` is what keeps that context small) — and the image is
 built for the builder's platform only, so the pushed `:latest` names one
 architecture. aka-proxy/aka-dns are configuration on top of a published base and
-ship multi-arch; a Rust plus wasm compile is not cross-targeted here, and nothing
-pulls this image automatically (`aka pull` fetches aka-proxy/aka-dns only), so
-another architecture builds its own tag with this same script.
+ship multi-arch; a Rust plus wasm compile is not cross-targeted here. `aka pull`
+fetches this image together with the other two, so the pushed `:latest` must
+match your architecture; a machine of another arch rebuilds the tag locally
+with this same script.
 
 `admin-api` serves the dashboard only when the build is present
 (`ADMIN_WEB_DIR`, default `/usr/share/aka-admin/web`) and the API alone when it
@@ -111,7 +119,10 @@ how recently `state.json` was written rather than `kill -0` on the pid file —
 ## Run it
 
 ```bash
-# the container (repo root; the root compose already includes this stack)
+# managed: `aka pull && aka up` already run this dashboard as aka_admin —
+#   nothing extra to do here
+# compose: the standalone path; set `[admin] enabled = false` in ~/.aka.toml
+#   first, or the managed aka_admin claims the same hosts and port 3001
 bash src/admin/build.sh
 docker compose up -d admin
 open http://aka.docker              # through aka itself
@@ -140,6 +151,7 @@ into the bundle instead; the dev container sets it for you.
 
 | Variable | Used by | Meaning |
 |---|---|---|
+| `[admin]` (`~/.aka.toml`) | aka up | managed container: `enabled`, `image`, `container_name`, `host_port`, `bind_ip`, `docker_socket`, `hosts` |
 | `PORT` | api | Listen port (default `80`, the container port; use `3000` on the host) |
 | `ADMIN_WEB_DIR` | api | Dashboard build to serve (default `/usr/share/aka-admin/web`) |
 | `AKA_HOME` | api | aka's runtime dir holding `state.json` + `proxyd.pid` (default `~/.aka`) |

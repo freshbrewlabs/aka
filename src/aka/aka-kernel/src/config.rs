@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -6,7 +7,34 @@ use serde::{Deserialize, Serialize};
 pub struct AkaConfig {
     pub dns: DnsConfig,
     pub proxy: ProxyConfig,
+    pub admin: AdminConfig,
     pub resolv: ResolvConfig,
+}
+
+impl AkaConfig {
+    /// Virtual hosts the admin dashboard is routed on: the explicit
+    /// `[admin] hosts` list when set, else `aka.<domain>` for every domain
+    /// aka serves (dnsmasq's `#` catch-all excluded — `aka.#` is not a
+    /// hostname). Lowercased and deduplicated, like discovery splits them.
+    pub fn admin_hosts(&self) -> Vec<String> {
+        let raw = if self.admin.hosts.is_empty() {
+            self.dns
+                .domains
+                .iter()
+                .filter(|d| !d.domain.is_empty() && d.domain != "#")
+                .map(|d| format!("aka.{}", d.domain))
+                .collect()
+        } else {
+            self.admin.hosts.clone()
+        };
+
+        raw.into_iter()
+            .map(|h| h.to_ascii_lowercase())
+            .filter(|h| !h.is_empty())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -106,6 +134,42 @@ impl ProxyConfig {
             ports.push(self.tls_port);
         }
         ports
+    }
+}
+
+/// The `aka status` web dashboard, run beside dns + proxy. Unauthenticated
+/// by design — every published port must stay on loopback.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct AdminConfig {
+    pub enabled: bool,
+    pub container_name: String,
+    pub image: String,
+    /// Host port published for direct access (the container listens on 80;
+    /// proxied access goes through the proxy's http vhosts instead).
+    pub host_port: u16,
+    /// Host interface/IP the dashboard port is published on. Loopback only:
+    /// the dashboard has no auth.
+    pub bind_ip: String,
+    /// Host docker socket, mounted at the standard container path so the
+    /// dashboard can talk to the engine.
+    pub docker_socket: String,
+    /// vhosts the proxy routes to the dashboard; empty means
+    /// `aka.<domain>` for every `[dns.domains]` entry.
+    pub hosts: Vec<String>,
+}
+
+impl Default for AdminConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            container_name: "aka_admin".into(),
+            image: "dewey4iv/aka-admin:latest".into(),
+            host_port: 3001,
+            bind_ip: "127.0.0.1".into(),
+            docker_socket: "/var/run/docker.sock".into(),
+            hosts: Vec::new(),
+        }
     }
 }
 

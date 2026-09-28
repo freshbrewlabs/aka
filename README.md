@@ -18,9 +18,9 @@ and tells you what's missing. It clones the repo to a temp dir, `cargo
 install`s the `aka` binary into `~/.cargo/bin`, and writes a commented
 `~/.aka.toml` if you don't have one (never overwrites). Nothing needs sudo,
 and **no docker images are built**: they're published, so `aka pull` fetches
-`aka-proxy` / `aka-dns` from the hub (run it once, before your first `aka
-up`). Re-run any time to update; the first run compiles aka from source (a
-few minutes). Pin a branch or tag with `... | AKA_REF=v1.2.3 bash`.
+`aka-proxy` / `aka-dns` / `aka-admin` from the hub (run it once, before your
+first `aka up`). Re-run any time to update; the first run compiles aka from
+source (a few minutes). Pin a branch or tag with `... | AKA_REF=v1.2.3 bash`.
 Afterwards `aka update` re-runs the same flow in place — clones the repo
 (default `main`; `--ref <branch|tag>` or `AKA_REF` pins, `AKA_REPO` points at
 a fork), cargo-reinstalls `~/.cargo/bin/aka`, and reports the version change.
@@ -34,6 +34,7 @@ aka install-sudo-rule                 # one-time: see "No sudo" below
 docker compose -f src/aka/docker-compose.yml up -d demo-web demo-cache
 
 aka up                                # no password: the rule covers it
+open http://aka.docker                  # -> the aka status dashboard
 curl http://demo.docker               # -> nginx welcome page
 redis-cli -h cache.docker             # -> PONG  (raw tcp route)
 aka status
@@ -89,15 +90,15 @@ Names are compatible with dory / nginx-proxy, so existing containers just work.
 ## Commands
 
 ```
-aka up                start dns + proxy + host resolver + proxyd (the daemon)
+aka up                start dns + proxy + admin dashboard + host resolver + proxyd (the daemon)
 aka down              stop everything, remove resolver entries
 aka restart           down + up
-aka status            container states, daemon health, route table
+aka status            container states, daemon health, route table (also http://aka.docker)
 aka routes [--json]   discovered routes (also in ~/.aka/state.json)
-aka logs [dns|proxy]  follow container logs
+aka logs [dns|proxy|admin]  follow container logs
 aka attach [service]  docker attach to a service container
 aka ip [service]      print a service container IP
-aka pull              pull the managed images
+aka pull              pull the managed images (proxy, dns, admin)
 aka config-file       write the default config (--force, --upgrade)
 aka update [--ref r]  rebuild + reinstall aka from the repo (default: main)
 aka version
@@ -109,8 +110,8 @@ Global flags: `-v/--verbose`, `-c/--config <path>`.
 
 `~/.aka.toml` (written by `aka config-file`), or `./.aka.toml` searched
 upward from the cwd; `-c` wins. TOML, with dory's config mapped onto
-top-level sections: `[dns]` ← dory `dnsmasq`, `[proxy]` ← `nginx_proxy`,
-`[resolv]` ← `resolv`.
+top-level sections `[dns]` ← dory `dnsmasq`, `[proxy]` ← `nginx_proxy`,
+`[resolv]` ← `resolv`, plus `[admin]` for the managed status dashboard.
 
 Multiple TLDs are first-class — each `[[dns.domains]]` entry (dory's
 `domains` array, once again) serves that domain **and all subdomains**:
@@ -130,6 +131,12 @@ address = "127.0.0.1"   # explicit entry => dnsmasq answers *.localhost too
 
 [resolv]
 enabled = true          # writes /etc/resolver/docker, /etc/resolver/test, ...
+
+[admin]
+enabled = true          # aka pull fetches the image, aka up runs the container
+# hosts defaults to aka.<domain> for every [[dns.domains]] entry above, and
+# the proxy routes those hosts to it automatically; direct access (aka down
+# included) is http://localhost:3001
 ```
 
 Verified: `dig +short a.docker` / `sub.x.test` / `y.localhost` all answer
@@ -149,6 +156,7 @@ at all (they resolve it to loopback natively).
 | `nginx_proxy.ssl_certs_dir` | `proxy.ssl_certs_dir` |
 | `resolv.nameserver` / `.port` | `resolv.nameserver` / `resolv.port` |
 | — (docker-machine IP) | `dns.bind_ip` (loopback on Docker Desktop) |
+| — (no dory counterpart) | `[admin]` (managed status dashboard) |
 
 Runtime home is `~/.aka` (`AKA_HOME` overrides; used by tests): rendered
 angie configs (`proxy.d/http`, `proxy.d/stream`), `state.json`,
@@ -184,11 +192,14 @@ Crates: `aka-kernel` (entities/config/state), `aka-docker` (bollard wrapper),
 `aka-cli` (the binary). No database/repository layers — this is a dev tool,
 docker is the datastore.
 
-`src/admin/` is a second stack in the same workspace: `aka status` as a local
-web dashboard, with no authentication at all (loopback-only ports), reading the
-same docker engine and `~/.aka/state.json`. It ships as one image —
-`aka-admin`, the axum API plus the dashboard it serves — and answers at
-`aka.<your tld>` (`http://aka.docker` by default). See `src/admin/README.md`.
+`aka status` also has a web face: `src/admin/` ships the `aka-admin` image —
+the axum API plus the dashboard it serves, reading the same docker engine and
+`~/.aka/state.json`, no authentication at all (loopback-only by design). It is
+a managed service like dns and proxy: `aka pull` fetches it, `aka up` runs it
+as `aka_admin`, and the container declares `aka.<domain>` for every aka domain
+as its own `VIRTUAL_HOST`, so the proxy routes the status page exactly like
+any other route. `[admin] enabled = false` hands the job back to compose (or
+nothing). See `src/admin/README.md`.
 
 ## Design notes / macOS
 
@@ -229,14 +240,16 @@ cargo run -p aka-cli -- up -c ./dev.yml   # dev loop; AKA_HOME=./.aka-dev
 docker compose up -d public-web   # landing page -> http://www.parkinglot.localhost / :8080 direct
                                    # (site lives in src/public/; prod = static host on that dir)
 bash src/admin/build.sh                   # dashboard image: tag + push (--no-push: tag)
-docker compose up -d admin      # aka status as a web dashboard -> http://aka.docker
-                                # (http://localhost:3001 with aka down)
+docker compose up -d admin      # the compose way to run the dashboard; the
+                                # managed `aka_admin` (aka up) already claims
+                                # the aka.* hosts and 127.0.0.1:3001 — use
+                                # `[admin] enabled = false` when you prefer compose
 docker compose --profile dev up -d admin-api admin-web  # hot-reload instead of the image
                                                         # -> http://localhost:3002, API on :3000
 ```
 
-The admin containers publish on `127.0.0.1` only, and `--profile dev` needs
-`admin` stopped — both claim the `aka.*` virtual hosts.
+The admin containers publish on `127.0.0.1` only, and the compose paths need
+the managed `aka_admin` stopped — one thing must own the `aka.*` virtual hosts.
 
 Images always carry two tags: `$TAG` (`latest`, what `aka pull` and the compose
 files default to) and the workspace version — read from Cargo.toml through

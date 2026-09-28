@@ -1,6 +1,10 @@
 # admin stack: the local, unauthenticated dashboard for `aka status`, served at
 # `aka.<your tld>` — aka.docker by default, aka.test / aka.localhost if you add
-# those domains to aka's config.
+# those domains to aka's config. This image is a managed aka service: `aka pull`
+# fetches it and `aka up` runs it as `aka_admin` (same mounts, `[admin]` section
+# of ~/.aka.toml controls it). Run this compose `admin` service INSTEAD only
+# with `[admin] enabled = false` — managed and compose admins claim the same
+# aka.* virtual hosts and 127.0.0.1:3001, and never both at once.
 #
 #   docker compose build --profile images aka-admin   # once, or: bash src/admin/build.sh
 #   docker compose up -d admin                        # from the project root
@@ -21,8 +25,9 @@
 #     at AKA_HOME=/aka/home
 #   * aka's config           -> aka's own discovery inside the container finds
 #     nothing (no cwd config, no ~/.aka.toml), so the built-in defaults apply:
-#     container names aka_proxy/aka_dns, image tags latest. If your ~/.aka.toml
-#     changes those, mount it and point at it:
+#     container names aka_proxy/aka_dns, image tags latest (the managed
+#     aka_admin gets this mount automatically). If your ~/.aka.toml changes
+#     those, mount it and point at it:
 #       - ${HOME}/.aka.toml:/aka/config.toml:ro   +   AKA_CONFIG: /aka/config.toml
 #
 # Every published port binds to 127.0.0.1 only, so this API is never reachable

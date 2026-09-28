@@ -1,5 +1,5 @@
-//! Managed-service lifecycle: specs for the dns + proxy containers,
-//! drift-aware `up`, `down`, status, ip and pull.
+//! Managed-service lifecycle: specs for the dns, proxy and admin (status
+//! dashboard) containers, drift-aware `up`, `down`, status, ip and pull.
 
 use aka_docker::AkaDocker;
 use aka_docker::bollard::models::{ContainerCreateBody, HostConfig};
@@ -7,6 +7,7 @@ use aka_kernel::BoxedError;
 use aka_kernel::config::AkaConfig;
 use futures::StreamExt;
 use sha2::{Digest, Sha256};
+use std::path::Path;
 use tracing::{debug, info};
 
 use crate::dnsmasq::dns_args;
@@ -131,6 +132,86 @@ pub fn proxy_spec(cfg: &AkaConfig, paths: &AkaPaths, tcp_ports: &[u16]) -> Conta
         host_config: Some(HostConfig {
             port_bindings: Some(bindings(&ports)),
             binds: Some(binds),
+            network_mode: Some(cfg.proxy.network.clone()),
+            restart_policy: Some(restart_policy(&cfg.proxy.restart)),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }
+}
+
+/// The dashboard listens on 80 (the image's `PORT` default); aka publishes
+/// it on `admin.host_port` for the direct (`aka down`-proof) view.
+pub const ADMIN_CONTAINER_PORT: u16 = 80;
+/// Where the host's aka home, resolved config and docker socket appear
+/// inside the admin container (paths the image already expects).
+const ADMIN_CONTAINER_HOME: &str = "/aka/home";
+const ADMIN_CONTAINER_CONFIG: &str = "/aka/config.toml";
+const ADMIN_CONTAINER_SOCKET: &str = "/var/run/docker.sock";
+
+/// The `aka status` dashboard, run with the same drift-aware lifecycle as
+/// dns + proxy. It declares its own proxy routes through `VIRTUAL_HOST`
+/// (`aka.<domain>` for every aka domain), so the proxy picks the status page
+/// up exactly like any other route container — no special-casing in the
+/// renderer or discovery.
+///
+/// `config_file` is the config the CLI resolved: inside the container aka's
+/// own discovery finds nothing, so mounting it (read-only, `AKA_CONFIG`)
+/// keeps the dashboard reading the same names/tags/state the host uses.
+pub fn admin_spec(
+    cfg: &AkaConfig,
+    paths: &AkaPaths,
+    config_file: Option<&Path>,
+) -> ContainerCreateBody {
+    let hosts = cfg.admin_hosts();
+
+    let mut env = vec![
+        format!("PORT={ADMIN_CONTAINER_PORT}"),
+        format!("AKA_HOME={ADMIN_CONTAINER_HOME}"),
+        "RUST_LOG=info".into(),
+        "ENVIRONMENT=local".into(),
+    ];
+    let mut binds = vec![
+        format!("{}:{ADMIN_CONTAINER_HOME}:ro", paths.home.display()),
+        format!("{}:{ADMIN_CONTAINER_SOCKET}", cfg.admin.docker_socket),
+    ];
+
+    if !hosts.is_empty() {
+        env.push(format!("VIRTUAL_HOST={}", hosts.join(",")));
+        env.push(format!("VIRTUAL_PORT={ADMIN_CONTAINER_PORT}"));
+    }
+    if let Some(file) = config_file.filter(|p| p.is_file()) {
+        env.push(format!("AKA_CONFIG={ADMIN_CONTAINER_CONFIG}"));
+        binds.push(format!("{}:{ADMIN_CONTAINER_CONFIG}:ro", file.display()));
+    }
+
+    let spec = spec_hash(&format!(
+        "admin|{}|{:?}|{}:{}:{}|{}|{}|{:?}",
+        cfg.admin.image,
+        hosts,
+        cfg.admin.bind_ip,
+        cfg.admin.host_port,
+        ADMIN_CONTAINER_PORT,
+        cfg.proxy.network,
+        cfg.proxy.restart,
+        binds
+    ));
+
+    ContainerCreateBody {
+        image: Some(cfg.admin.image.clone()),
+        labels: Some(labels("admin", &spec)),
+        env: Some(env),
+        exposed_ports: Some(vec![format!("{ADMIN_CONTAINER_PORT}/tcp")]),
+        host_config: Some(HostConfig {
+            port_bindings: Some(bindings(&[(
+                cfg.admin.host_port,
+                ADMIN_CONTAINER_PORT,
+                "tcp",
+                &cfg.admin.bind_ip,
+            )])),
+            binds: Some(binds),
+            // standalone on the proxy's network: reachable by IP for the
+            // rendered vhost, published on `host_port` for direct access
             network_mode: Some(cfg.proxy.network.clone()),
             restart_policy: Some(restart_policy(&cfg.proxy.restart)),
             ..Default::default()
@@ -264,6 +345,7 @@ pub async fn up(
     docker: &AkaDocker,
     cfg: &AkaConfig,
     paths: &AkaPaths,
+    config_file: Option<&Path>,
 ) -> Result<Vec<(String, Ensured)>, BoxedError> {
     paths.ensure_dirs()?;
     docker.ensure_network(&cfg.proxy.network).await?;
@@ -283,12 +365,27 @@ pub async fn up(
         outcomes.push((cfg.proxy.container_name.clone(), outcome));
     }
 
+    if cfg.admin.enabled {
+        let outcome = ensure_service(
+            docker,
+            &cfg.admin.container_name,
+            &admin_spec(cfg, paths, config_file),
+        )
+        .await?;
+        debug!("admin: {outcome:?}");
+        outcomes.push((cfg.admin.container_name.clone(), outcome));
+    }
+
     Ok(outcomes)
 }
 
 /// Stop (but keep) the managed containers.
 pub async fn down(docker: &AkaDocker, cfg: &AkaConfig) -> Result<(), BoxedError> {
-    for name in [&cfg.dns.container_name, &cfg.proxy.container_name] {
+    for name in [
+        &cfg.dns.container_name,
+        &cfg.proxy.container_name,
+        &cfg.admin.container_name,
+    ] {
         docker.stop(name).await?;
     }
     Ok(())
@@ -297,7 +394,11 @@ pub async fn down(docker: &AkaDocker, cfg: &AkaConfig) -> Result<(), BoxedError>
 pub async fn status(docker: &AkaDocker, cfg: &AkaConfig) -> Result<Vec<ServiceStatus>, BoxedError> {
     let mut statuses = Vec::new();
 
-    for name in [&cfg.dns.container_name, &cfg.proxy.container_name] {
+    for name in [
+        &cfg.dns.container_name,
+        &cfg.proxy.container_name,
+        &cfg.admin.container_name,
+    ] {
         match docker.summary_opt(name, &cfg.proxy.network).await? {
             Some(s) => {
                 let ip = s.backend_ip().map(str::to_owned);
@@ -333,13 +434,13 @@ pub async fn ip_of(
     docker.ip_of(name, &cfg.proxy.network).await
 }
 
-/// Pull both managed images, forwarding progress lines.
+/// Pull every managed image, forwarding progress lines.
 pub async fn pull(
     docker: &AkaDocker,
     cfg: &AkaConfig,
     mut on_line: impl FnMut(&str),
 ) -> Result<(), BoxedError> {
-    for image in [&cfg.dns.image, &cfg.proxy.image] {
+    for image in [&cfg.dns.image, &cfg.proxy.image, &cfg.admin.image] {
         if docker.image_exists(image).await {
             on_line(&format!("{image} already present"));
             continue;
@@ -350,4 +451,73 @@ pub async fn pull(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn paths() -> AkaPaths {
+        AkaPaths {
+            home: std::path::PathBuf::from("/tmp/aka-test-home"),
+        }
+    }
+
+    #[test]
+    fn admin_spec_declares_its_own_proxy_routes() {
+        let cfg = AkaConfig::default();
+        let body = admin_spec(&cfg, &paths(), None);
+        let env = body.env.unwrap();
+
+        assert!(
+            env.contains(&"VIRTUAL_HOST=aka.docker".to_string()),
+            "the status page routes through normal discovery: {env:?}"
+        );
+        assert!(env.contains(&"VIRTUAL_PORT=80".to_string()));
+        assert!(env.contains(&"PORT=80".to_string()));
+        assert!(env.contains(&"AKA_HOME=/aka/home".to_string()));
+        assert!(
+            !env.iter().any(|e| e.starts_with("AKA_CONFIG=")),
+            "a config path that is not a file must not be mounted"
+        );
+
+        let host = body.host_config.unwrap();
+        let binds = host.binds.unwrap();
+        assert!(binds.contains(&"/tmp/aka-test-home:/aka/home:ro".to_string()));
+        assert!(binds.contains(&"/var/run/docker.sock:/var/run/docker.sock".to_string()));
+
+        let bindings = host.port_bindings.unwrap();
+        let pb = &bindings["80/tcp"].as_ref().unwrap()[0];
+        assert_eq!(pb.host_port.as_deref(), Some("3001"));
+        assert_eq!(pb.host_ip.as_deref(), Some("127.0.0.1"));
+        assert_eq!(host.network_mode.as_deref(), Some("aka"));
+    }
+
+    #[test]
+    fn admin_spec_mounts_the_resolved_config_when_it_exists() {
+        let dir = std::env::temp_dir().join(format!("aka-admin-cfg-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("aka.toml");
+        std::fs::write(&file, "[proxy]\nhttp_port = 8080\n").unwrap();
+
+        let cfg = AkaConfig::default();
+        let body = admin_spec(&cfg, &paths(), Some(&file));
+        assert!(
+            body.env
+                .unwrap()
+                .contains(&"AKA_CONFIG=/aka/config.toml".to_string())
+        );
+
+        // a stale path (deleted, or defaults with no file on disk) stays unmounted
+        let body = admin_spec(&cfg, &paths(), Some(&dir.join("gone.toml")));
+        assert!(
+            !body
+                .env
+                .unwrap()
+                .iter()
+                .any(|e| e.starts_with("AKA_CONFIG="))
+        );
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

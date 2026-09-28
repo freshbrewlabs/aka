@@ -33,9 +33,10 @@ fn service_name(cfg: &AkaConfig, service: Option<&str>) -> Result<String, BoxedE
     match service.unwrap_or("proxy") {
         "proxy" => Ok(cfg.proxy.container_name.clone()),
         "dns" => Ok(cfg.dns.container_name.clone()),
+        "admin" => Ok(cfg.admin.container_name.clone()),
         other if service_maybe_container(other) => Ok(other.to_owned()),
         other => Err(format!(
-            "unknown service {other:?} (expected dns, proxy or a container name)"
+            "unknown service {other:?} (expected dns, proxy, admin or a container name)"
         )
         .into()),
     }
@@ -87,9 +88,34 @@ pub async fn up(provider: &Provider) -> Result<(), BoxedError> {
         }
     }
 
-    let outcomes = aka_services::lifecycle::up(docker, cfg, paths).await?;
+    if cfg.admin.enabled && !docker.running(&cfg.admin.container_name).await? {
+        ensure_port_free(
+            docker,
+            &cfg.dns.kill_others,
+            cfg.admin.host_port,
+            false,
+            &cfg.admin.container_name,
+        )
+        .await?;
+    }
+
+    // admin reads the very config the CLI resolved, so mounting it keeps the
+    // dashboard's in-container discovery honest even with renamed services.
+    let selection = provider.fetch_unchecked::<ConfigSelection>();
+    let start = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
+    let config_file = aka_services::config::find_config_file(&start, selection.explicit.as_deref());
+    let outcomes = aka_services::lifecycle::up(docker, cfg, paths, config_file.as_deref()).await?;
     for (name, outcome) in &outcomes {
         println!("{name}: {outcome:?}");
+    }
+
+    if cfg.admin.enabled {
+        let direct = format!("http://{}:{}", cfg.admin.bind_ip, cfg.admin.host_port);
+        // the vhost only answers while the proxy serves it; direct is always valid
+        match cfg.admin_hosts().first().filter(|_| cfg.proxy.enabled) {
+            Some(host) => println!("dashboard: http://{host} (direct: {direct})"),
+            None => println!("dashboard: {direct}"),
+        }
     }
 
     if cfg.resolv.enabled {
@@ -205,6 +231,7 @@ pub async fn down(provider: &Provider) -> Result<(), BoxedError> {
     aka_services::lifecycle::down(docker, cfg).await?;
     println!("{}: stopped", cfg.dns.container_name);
     println!("{}: stopped", cfg.proxy.container_name);
+    println!("{}: stopped", cfg.admin.container_name);
 
     if cfg.resolv.enabled {
         // the services are already stopped; failing resolver cleanup must
@@ -327,6 +354,7 @@ pub async fn logs(provider: &Provider, service: Option<&str>) -> Result<(), Boxe
         None => vec![
             cfg.dns.container_name.clone(),
             cfg.proxy.container_name.clone(),
+            cfg.admin.container_name.clone(),
         ],
     };
 
