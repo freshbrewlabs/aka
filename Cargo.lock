@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "admin-api"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "admin-http",
  "admin-kernel",
@@ -26,7 +26,7 @@ dependencies = [
 
 [[package]]
 name = "admin-http"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "admin-kernel",
  "serde",
@@ -34,14 +34,14 @@ dependencies = [
 
 [[package]]
 name = "admin-kernel"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "admin-rs"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "admin-http",
  "admin-kernel",
@@ -51,7 +51,7 @@ dependencies = [
 
 [[package]]
 name = "admin-services"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "admin-kernel",
  "aka-docker",
@@ -64,12 +64,12 @@ dependencies = [
 
 [[package]]
 name = "admin-web"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "admin-kernel",
  "admin-rs",
  "gloo-timers",
- "http 0.3.0",
+ "http 0.3.1",
  "leptos",
  "leptos_router",
  "wasm-bindgen-futures",
@@ -100,7 +100,7 @@ dependencies = [
 
 [[package]]
 name = "aka-cli"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "aka-docker",
  "aka-kernel",
@@ -116,7 +116,7 @@ dependencies = [
 
 [[package]]
 name = "aka-docker"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "aka-kernel",
  "bollard",
@@ -128,14 +128,14 @@ dependencies = [
 
 [[package]]
 name = "aka-kernel"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "aka-services"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "aka-docker",
  "aka-kernel",
@@ -1066,7 +1066,7 @@ checksum = "c9356095b4b41197bba32173600e1582792cda618f65d12f68e2e77d273413c5"
 
 [[package]]
 name = "http"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "axum",
  "serde",
@@ -2001,7 +2001,7 @@ dependencies = [
 
 [[package]]
 name = "provider"
-version = "0.3.0"
+version = "0.3.1"
 
 [[package]]
 name = "quote"
@@ -2696,7 +2696,7 @@ dependencies = [
 
 [[package]]
 name = "telemetry"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "tracing",
  "tracing-bunyan-formatter",
