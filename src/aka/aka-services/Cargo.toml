@@ -1,0 +1,17 @@
+[package]
+name = "aka-services"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+aka-kernel = { path = "../aka-kernel" }
+aka-docker = { path = "../aka-docker" }
+
+chrono = "0.4.42"
+futures = "0.3.34"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.148"
+serde_yaml = "0.9.34"
+sha2 = "0.10.8"
+tokio = { version = "1.43.0", features = ["full"] }
+tracing = "0.1.41"

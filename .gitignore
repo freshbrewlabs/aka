@@ -1,0 +1,37 @@
+# Generated files
+**/target
+dist/
+
+# Environment files
+.env
+*.env.secrets
+*.env
+*.env.development
+*.env.staging
+*.env.production
+!example.env
+
+# IDE
+.DS_Store
+*.iml
+*.ipynb
+.project
+.settings
+.vscode
+
+# Config
+!*/.gitkeep
+
+# Kubernetes
+**/values-staging.yaml
+**/values-beta.yaml
+**/values-production.yaml
+
+# Build artifacts
+*.log
+
+# Include .opencode folder in templates
+!.opencode/
+!.opencode/.gitignore
+!.opencode/package.json
+!.opencode/package-lock.json

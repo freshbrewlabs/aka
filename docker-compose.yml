@@ -1,0 +1,11 @@
+# Each stack generates its own docker-compose.yml into src/<stack-name>/
+# (e.g. `cargo generate --name app --path .../stack-template/stack --destination src`).
+# Include the stacks you want to run from the project root:
+#
+# include:
+#   - ./src/app/docker-compose.yml
+include:
+  - ./src/aka/docker-compose.yml
+
+volumes:
+  shared-vol:
