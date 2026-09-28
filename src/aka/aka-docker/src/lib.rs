@@ -15,7 +15,7 @@ use bollard::models::{
 use bollard::query_parameters::{
     CreateContainerOptionsBuilder, CreateImageOptionsBuilder, EventsOptionsBuilder,
     ListContainersOptionsBuilder, LogsOptionsBuilder, RemoveContainerOptionsBuilder,
-    StopContainerOptionsBuilder,
+    StopContainerOptionsBuilder, TagImageOptionsBuilder,
 };
 
 /// Re-export so dependents cannot drift from the engine API version.
@@ -490,6 +490,15 @@ impl AkaDocker {
                 false
             }
         }
+    }
+
+    /// Point `dst` (a `name:tag` reference) at the same image as `src`.
+    pub async fn tag(&self, src: &str, dst: &str) -> Result<(), BoxedError> {
+        let (repo, tag) = split_image(dst);
+        self.docker
+            .tag_image(src, Some(TagImageOptionsBuilder::default().repo(&repo).tag(&tag).build()))
+            .await?;
+        Ok(())
     }
 
     // ---------------------------------------------------------------- events

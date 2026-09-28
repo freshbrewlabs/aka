@@ -435,12 +435,36 @@ pub async fn ip_of(
 }
 
 /// Pull every managed image, forwarding progress lines.
+///
+/// Each image is first tried at the tag matching the running CLI's version
+/// (every published build carries `:latest` plus its crate version), and the
+/// configured reference is then retagged onto that build, so `aka up` runs
+/// the images that match the CLI. When the hub has no exact version match
+/// (unreleased ref, custom repo), the configured tag is pulled as before.
 pub async fn pull(
     docker: &AkaDocker,
     cfg: &AkaConfig,
+    version: &str,
     mut on_line: impl FnMut(&str),
 ) -> Result<(), BoxedError> {
     for image in [&cfg.dns.image, &cfg.proxy.image, &cfg.admin.image] {
+        let (name, tag) = aka_docker::split_image(image);
+        let pinned = format!("{name}:{version}");
+
+        if tag != version {
+            // A failure here is not fatal: the configured tag is the fallback.
+            let mut stream = docker.pull(&pinned);
+            while let Some(line) = stream.next().await {
+                on_line(&line.unwrap_or_else(|err| format!("error: {err}")));
+            }
+            if docker.image_exists(&pinned).await {
+                docker.tag(&pinned, image).await?;
+                on_line(&format!("{image} pinned to {version}"));
+                continue;
+            }
+            on_line(&format!("{pinned} unavailable; falling back to {image}"));
+        }
+
         if docker.image_exists(image).await {
             on_line(&format!("{image} already present"));
             continue;

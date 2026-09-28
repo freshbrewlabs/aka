@@ -47,7 +47,7 @@ enum Commands {
         /// dns | proxy (default: proxy)
         service: Option<String>,
     },
-    /// Pull the managed docker images
+    /// Pull the managed docker images (matching this aka version)
     Pull,
     /// Show the routes discovered from running containers
     Routes {

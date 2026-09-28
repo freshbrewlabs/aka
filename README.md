@@ -19,8 +19,10 @@ install`s the `aka` binary into `~/.cargo/bin`, and writes a commented
 `~/.aka.toml` if you don't have one (never overwrites). Nothing needs sudo,
 and **no docker images are built**: they're published, so `aka pull` fetches
 `aka-proxy` / `aka-dns` / `aka-admin` from the hub (run it once, before your
-first `aka up`). Re-run any time to update; the first run compiles aka from
-source (a few minutes). Pin a branch or tag with `... | AKA_REF=v1.2.3 bash`.
+first `aka up`). It pulls the build tagged with your installed aka version and
+points the configured tag at it, so re-run it after `aka update`; the first run
+compiles aka from source (a few minutes). Pin a branch or tag with
+`... | AKA_REF=v1.2.3 bash`.
 Afterwards `aka update` re-runs the same flow in place — clones the repo
 (default `main`; `--ref <branch|tag>` or `AKA_REF` pins, `AKA_REPO` points at
 a fork), cargo-reinstalls `~/.cargo/bin/aka`, and reports the version change.
@@ -98,7 +100,7 @@ aka routes [--json]   discovered routes (also in ~/.aka/state.json)
 aka logs [dns|proxy|admin]  follow container logs
 aka attach [service]  docker attach to a service container
 aka ip [service]      print a service container IP
-aka pull              pull the managed images (proxy, dns, admin)
+aka pull              pull the managed images (proxy, dns, admin) at this aka version
 aka config-file       write the default config (--force, --upgrade)
 aka update [--ref r]  rebuild + reinstall aka from the repo (default: main)
 aka version
@@ -251,10 +253,11 @@ docker compose --profile dev up -d admin-api admin-web  # hot-reload instead of 
 The admin containers publish on `127.0.0.1` only, and the compose paths need
 the managed `aka_admin` stopped — one thing must own the `aka.*` virtual hosts.
 
-Images always carry two tags: `$TAG` (`latest`, what `aka pull` and the compose
-files default to) and the workspace version — read from Cargo.toml through
+Images always carry two tags: `$TAG` (`latest`, what the compose files default
+to) and the workspace version — read from Cargo.toml through
 `bin/crate_version.sh`, the same number `aka version` prints and the dashboard's
-healthcheck reports. `bin/version.sh` prints those versions; `bin/version.sh
+healthcheck reports; `aka pull` tries that version tag and moves the configured
+image onto it. `bin/version.sh` prints those versions; `bin/version.sh
 <version>` moves every crate at once (needs cargo-edit: `cargo install
 --no-default-features --features set-version cargo-edit`); the next
 `bin/build.sh` publishes both tags.

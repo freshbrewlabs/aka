@@ -436,7 +436,10 @@ pub async fn ip(provider: &Provider, service: Option<&str>) -> Result<(), BoxedE
 
 pub async fn pull(provider: &Provider) -> Result<(), BoxedError> {
     let (cfg, _, docker) = ctx(provider);
-    aka_services::lifecycle::pull(docker, cfg, |line| println!("{line}")).await
+    aka_services::lifecycle::pull(docker, cfg, env!("CARGO_PKG_VERSION"), |line| {
+        println!("{line}")
+    })
+    .await
 }
 
 // ------------------------------------------------------------------ routes

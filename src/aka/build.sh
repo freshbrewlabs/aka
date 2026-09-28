@@ -6,8 +6,8 @@ set -euo pipefail
 # and publish them to Docker Hub as $HUB_NAMESPACE/<image> for linux/amd64 +
 # linux/arm64. Pushing requires `docker login`.
 #
-# Every image gets two tags: $TAG (`latest`, what `aka pull` and the compose
-# files default to) and the version of the `aka-cli` crate — so the image a
+# Every image gets two tags: $TAG (`latest`, what the compose files default to)
+# and the version of the `aka-cli` crate — so the image a
 # container runs from carries the same number `aka version` prints. Both come
 # from `bin/version.sh`, which moves every crate at once.
 #

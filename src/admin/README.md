@@ -78,8 +78,8 @@ build (`.dockerignore` is what keeps that context small) — and the image is
 built for the builder's platform only, so the pushed `:latest` names one
 architecture. aka-proxy/aka-dns are configuration on top of a published base and
 ship multi-arch; a Rust plus wasm compile is not cross-targeted here. `aka pull`
-fetches this image together with the other two, so the pushed `:latest` must
-match your architecture; a machine of another arch rebuilds the tag locally
+fetches this image together with the other two (at its version tag), so the
+pushed build must match your architecture; a machine of another arch rebuilds the tag
 with this same script.
 
 `admin-api` serves the dashboard only when the build is present
