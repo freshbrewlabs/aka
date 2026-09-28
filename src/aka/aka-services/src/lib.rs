@@ -9,6 +9,7 @@ pub mod discover;
 pub mod dnsmasq;
 pub mod lifecycle;
 pub mod paths;
+pub mod privileged;
 pub mod proxyd;
 pub mod resolv;
 pub mod statefile;

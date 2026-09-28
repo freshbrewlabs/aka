@@ -15,15 +15,15 @@ bin/install.sh
 
 Builds the two managed images, `cargo install`s the `aka` binary into
 `~/.cargo/bin`, and writes a commented `~/.aka.toml` if you don't have one
-(never overwrites). Nothing needs sudo; `aka up` prompts for it when it
-writes `/etc/resolver` files. Re-run any time — image builds are cached.
+(never overwrites). Re-run any time — image builds are cached.
 
 ## Quick start
 
 ```bash
+aka install-sudo-rule                 # one-time: see "No sudo" below
 docker compose -f src/aka/docker-compose.yml up -d demo-web demo-cache
 
-sudo aka up                           # first run: sudo to write /etc/resolver
+aka up                                # no password: the rule covers it
 curl http://demo.docker               # -> nginx welcome page
 redis-cli -h cache.docker             # -> PONG  (raw tcp route)
 aka status
@@ -32,6 +32,26 @@ aka down
 
 Without the compose demo, any running container that sets `VIRTUAL_HOST`
 is picked up automatically — no restart of aka required.
+
+## No sudo
+
+`aka up` / `aka down` edit `/etc/resolver/*` (macOS) or `/etc/resolv.conf`
+(Linux) by shelling out `sudo -n aka _privileged ...` — a hidden root-side
+verb that only accepts validated domains and IP literals. Run this once:
+
+```bash
+aka install-sudo-rule    # the only moment sudo ever asks for a password
+```
+
+It writes `you ALL=(root) NOPASSWD: <aka> _privileged *` to
+`/etc/sudoers.d/com.freshbrewlabs.aka` and validates it with `visudo -cf`
+before accepting. Remove it with
+`sudo rm /etc/sudoers.d/com.freshbrewlabs.aka`; without the rule aka just
+prompts for your password (and prints this command as the hint). Caveat:
+the rule points at the user-owned `aka` binary path, so whoever can replace
+that binary can perform aka's root writes — the normal trust level for a
+dev-machine user; delete the rule to revoke. The port-conflict stop/kill
+flow (`kill_others`) still uses an interactive `sudo kill`.
 
 ## Route declarations
 
@@ -164,9 +184,10 @@ docker is the datastore.
   ports — a bare bind probe is therefore not proof of a free port; aka
   uses `lsof` truth plus the docker publish list instead.
 - **`/etc/resolver/<domain>`** files (dory-style) make macOS send
-  `*.docker` to 127.0.0.1 without touching system DNS; writing them needs
-  sudo (`aka up` shells out; `aka down` removes them). `resolv.enabled:
-  false` skips this for testing with `dig @127.0.0.1` / `curl --resolve`.
+  `*.docker` to 127.0.0.1 without touching system DNS; aka writes/removes
+  them via the passwordless `_privileged` verb (see "No sudo").
+  `resolv.enabled: false` skips this for testing with `dig @127.0.0.1` /
+  `curl --resolve`.
 - **`.localhost` hosts**: browsers resolve `*.localhost` to loopback on
   their own. For CLI tools (`curl`, `dig`) dnsmasq needs the explicit
   `[[dns.domains]] domain = "localhost"` entry — once present it answers
@@ -188,5 +209,7 @@ cargo run -p aka-cli -- up -c ./dev.yml   # dev loop; AKA_HOME=./.aka-dev
 
 Unit tests cover discovery, renderers (golden fragments + map-line shape),
 TOML config merge/upgrade with multi-domain lists, state round-trip, dnsmasq
-args, and the port-conflict classifier. Live verification (images + daemon + http/tcp/tls termination
-through a real Docker Desktop) is documented in the commit history.
+args, the port-conflict classifier, and `_privileged` request validation
+(domain injection, foreign-file safety, sudoers scoping). Live verification
+(images + daemon + http/tcp/tls termination through a real Docker Desktop)
+is documented in the commit history.

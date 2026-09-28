@@ -21,7 +21,7 @@ pub fn resolve_config(explicit: &Option<PathBuf>, _daemon: bool) -> Result<AkaCo
     aka_services::load_or_default(&start, explicit.as_deref())
 }
 
-fn ctx(provider: &'static Provider) -> (&'static AkaConfig, &'static AkaPaths, &'static AkaDocker) {
+fn ctx(provider: &Provider) -> (&AkaConfig, &AkaPaths, &AkaDocker) {
     (
         provider.fetch_unchecked::<AkaConfig>(),
         provider.fetch_unchecked::<AkaPaths>(),
@@ -47,7 +47,7 @@ fn service_maybe_container(name: &str) -> bool {
 
 // ---------------------------------------------------------------------- up
 
-pub async fn up(provider: &'static Provider) -> Result<(), BoxedError> {
+pub async fn up(provider: &Provider) -> Result<(), BoxedError> {
     let (cfg, paths, docker) = ctx(provider);
 
     docker
@@ -134,7 +134,7 @@ fn alive(pid: u32) -> bool {
         .unwrap_or(false)
 }
 
-fn ensure_daemon(paths: &AkaPaths, provider: &'static Provider) -> DaemonSpawn {
+fn ensure_daemon(paths: &AkaPaths, provider: &Provider) -> DaemonSpawn {
     let pid_file = paths.pid_file();
     if let Some(pid) = daemon_pid(&pid_file) {
         return DaemonSpawn::AlreadyRunning { pid };
@@ -198,7 +198,7 @@ fn stop_daemon(paths: &AkaPaths) {
 
 // -------------------------------------------------------------------- down
 
-pub async fn down(provider: &'static Provider) -> Result<(), BoxedError> {
+pub async fn down(provider: &Provider) -> Result<(), BoxedError> {
     let (cfg, paths, docker) = ctx(provider);
 
     stop_daemon(paths);
@@ -207,15 +207,19 @@ pub async fn down(provider: &'static Provider) -> Result<(), BoxedError> {
     println!("{}: stopped", cfg.proxy.container_name);
 
     if cfg.resolv.enabled {
-        aka_services::resolv::clean(cfg)?;
-        println!("resolver entries removed");
+        // the services are already stopped; failing resolver cleanup must
+        // not make `down` itself fail (sudo-free flow: install-sudo-rule)
+        match aka_services::resolv::clean(cfg) {
+            Ok(()) => println!("resolver entries removed"),
+            Err(err) => println!("warn: resolver entries not removed: {err}"),
+        }
     }
     Ok(())
 }
 
 // ------------------------------------------------------------------ status
 
-pub async fn status(provider: &'static Provider) -> Result<(), BoxedError> {
+pub async fn status(provider: &Provider) -> Result<(), BoxedError> {
     let (cfg, paths, docker) = ctx(provider);
 
     let version = docker.daemon_version().await.unwrap_or_else(|_| "?".into());
@@ -314,7 +318,7 @@ fn print_routes(state: &aka_kernel::state::DaemonState) {
 
 // -------------------------------------------------------------------- logs
 
-pub async fn logs(provider: &'static Provider, service: Option<&str>) -> Result<(), BoxedError> {
+pub async fn logs(provider: &Provider, service: Option<&str>) -> Result<(), BoxedError> {
     let (cfg, _, docker) = ctx(provider);
     let name = service_name(cfg, service)?;
 
@@ -375,7 +379,7 @@ async fn next_line(streams: &mut [PinnedLogStream]) -> Option<(String, aka_docke
 
 // ------------------------------------------------------------------ attach
 
-pub fn attach(provider: &'static Provider, service: Option<&str>) -> Result<(), BoxedError> {
+pub fn attach(provider: &Provider, service: Option<&str>) -> Result<(), BoxedError> {
     let (cfg, _, _) = ctx(provider);
     let name = service_name(cfg, service)?;
     println!("attaching to {name} (detach: ctrl-p ctrl-q)");
@@ -390,7 +394,7 @@ pub fn attach(provider: &'static Provider, service: Option<&str>) -> Result<(), 
 
 // ---------------------------------------------------------------------- ip
 
-pub async fn ip(provider: &'static Provider, service: Option<&str>) -> Result<(), BoxedError> {
+pub async fn ip(provider: &Provider, service: Option<&str>) -> Result<(), BoxedError> {
     let (cfg, _, docker) = ctx(provider);
     let name = service_name(cfg, service)?;
     match aka_services::lifecycle::ip_of(docker, cfg, &name).await? {
@@ -402,14 +406,14 @@ pub async fn ip(provider: &'static Provider, service: Option<&str>) -> Result<()
 
 // -------------------------------------------------------------------- pull
 
-pub async fn pull(provider: &'static Provider) -> Result<(), BoxedError> {
+pub async fn pull(provider: &Provider) -> Result<(), BoxedError> {
     let (cfg, _, docker) = ctx(provider);
     aka_services::lifecycle::pull(docker, cfg, |line| println!("{line}")).await
 }
 
 // ------------------------------------------------------------------ routes
 
-pub fn routes(provider: &'static Provider, json: bool) -> Result<(), BoxedError> {
+pub fn routes(provider: &Provider, json: bool) -> Result<(), BoxedError> {
     let paths = provider.fetch_unchecked::<AkaPaths>();
     let state = aka_services::statefile::read(&paths.state_file())?
         .ok_or("proxyd has not run yet (start with `aka up`)")?;
@@ -424,11 +428,7 @@ pub fn routes(provider: &'static Provider, json: bool) -> Result<(), BoxedError>
 
 // ------------------------------------------------------------- config-file
 
-pub fn config_file(
-    provider: &'static Provider,
-    force: bool,
-    upgrade: bool,
-) -> Result<(), BoxedError> {
+pub fn config_file(provider: &Provider, force: bool, upgrade: bool) -> Result<(), BoxedError> {
     let selection = provider.fetch_unchecked::<ConfigSelection>();
     let target = selection
         .explicit
@@ -453,9 +453,42 @@ pub fn version() -> Result<(), BoxedError> {
     Ok(())
 }
 
+// --------------------------------------------------------------- privileged
+
+/// Root-side resolver writes, invoked via `sudo aka _privileged ...`.
+pub fn privileged(cmd: crate::PrivilegedCmd) -> Result<(), BoxedError> {
+    use crate::PrivilegedCmd as P;
+
+    match cmd {
+        P::Write {
+            domain,
+            nameserver,
+            port,
+        } => {
+            let req = aka_services::privileged::Request {
+                domains: domain,
+                nameserver: nameserver
+                    .parse()
+                    .map_err(|_| format!("invalid nameserver {nameserver:?}"))?,
+                port,
+            };
+            for path in aka_services::privileged::write(&req)? {
+                println!("wrote {}", path.display());
+            }
+            Ok(())
+        }
+        P::Clean { domain } => aka_services::privileged::clean(&domain),
+        P::Noop => Ok(()),
+    }
+}
+
+pub fn install_sudo_rule() -> Result<(), BoxedError> {
+    aka_services::privileged::install_sudo_rule()
+}
+
 // ------------------------------------------------------------------ proxyd
 
-pub async fn proxyd(provider: &'static Provider) -> Result<(), BoxedError> {
+pub async fn proxyd(provider: &Provider) -> Result<(), BoxedError> {
     let (cfg, paths, _docker) = ctx(provider);
 
     paths.ensure_dirs()?;

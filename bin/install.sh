@@ -3,8 +3,9 @@ set -euo pipefail
 
 # Install aka locally: the two managed docker images, the `aka` binary into
 # ~/.cargo/bin, and a commented ~/.aka.toml (an existing config is never
-# overwritten). Safe to re-run; nothing here needs sudo — `aka up` prompts
-# for sudo itself when it writes /etc/resolver files.
+# overwritten). Safe to re-run; nothing here needs sudo. Running `aka
+# install-sudo-rule` once is what makes day-to-day `aka up`/`aka down`
+# sudo-free (without it they prompt for a password).
 
 cd "$(dirname "$0")/.."
 
@@ -29,8 +30,11 @@ fi
 cat <<'EOF'
 
 next steps:
-  sudo aka up     # starts dns + proxy + proxyd, writes /etc/resolver/*
+  aka install-sudo-rule   # one-time: makes up/down permanently sudo-free
+  aka up                  # starts dns + proxy + proxyd, writes /etc/resolver/*
   aka status
-  sudo aka down
+  aka down
+
+Without the rule, aka up/down fall back to prompting for your password.
 
 EOF

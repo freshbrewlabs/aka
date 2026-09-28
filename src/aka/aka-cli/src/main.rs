@@ -64,11 +64,40 @@ enum Commands {
         #[arg(short, long)]
         upgrade: bool,
     },
+    /// Install the sudoers rule that makes `aka up`/`aka down` sudo-free
+    /// (a one-time sudo; the rule is scoped to aka's own `_privileged` verb)
+    InstallSudoRule,
     /// Report the installed version
     Version,
     /// Internal proxy daemon (spawned by `aka up`)
     #[command(hide = true, name = "_proxyd")]
     Proxyd,
+    /// Internal root-side resolver operations (invoked via sudo)
+    #[command(hide = true, name = "_privileged")]
+    Privileged {
+        #[command(subcommand)]
+        cmd: PrivilegedCmd,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum PrivilegedCmd {
+    /// Write resolver entries for the given domains
+    Write {
+        #[arg(long)]
+        domain: Vec<String>,
+        #[arg(long)]
+        nameserver: String,
+        #[arg(long)]
+        port: u16,
+    },
+    /// Remove aka's resolver entries
+    Clean {
+        #[arg(long)]
+        domain: Vec<String>,
+    },
+    /// Succeed doing nothing (rule probe)
+    Noop,
 }
 
 #[tokio::main]
@@ -93,31 +122,37 @@ async fn main() -> Result<(), aka_kernel::BoxedError> {
     telemetry::init_subscriber(subscriber);
 
     let daemon = matches!(cli.command, Commands::Proxyd);
+    let privileged = matches!(cli.command, Commands::Privileged { .. });
 
     let mut provider = provider::Provider::new();
     provider.store(aka_services::AkaPaths::resolve()?);
-    provider.store(commands::resolve_config(&cli.config, daemon)?);
-    provider.store(aka_docker::AkaDocker::connect()?);
-    provider.store(commands::ConfigSelection {
-        explicit: cli.config.clone(),
-    });
-    let provider: &'static provider::Provider = Box::leak(Box::new(provider));
+    if !privileged {
+        // the root-side verb takes everything from argv; it must not read
+        // user config or talk to docker
+        provider.store(commands::resolve_config(&cli.config, daemon)?);
+        provider.store(aka_docker::AkaDocker::connect()?);
+        provider.store(commands::ConfigSelection {
+            explicit: cli.config.clone(),
+        });
+    }
 
     match cli.command {
-        Commands::Up => commands::up(provider).await,
-        Commands::Down => commands::down(provider).await,
+        Commands::Up => commands::up(&provider).await,
+        Commands::Down => commands::down(&provider).await,
         Commands::Restart => {
-            commands::down(provider).await?;
-            commands::up(provider).await
+            commands::down(&provider).await?;
+            commands::up(&provider).await
         }
-        Commands::Status => commands::status(provider).await,
-        Commands::Logs { service } => commands::logs(provider, service.as_deref()).await,
-        Commands::Attach { service } => commands::attach(provider, service.as_deref()),
-        Commands::Ip { service } => commands::ip(provider, service.as_deref()).await,
-        Commands::Pull => commands::pull(provider).await,
-        Commands::Routes { json } => commands::routes(provider, json),
-        Commands::ConfigFile { force, upgrade } => commands::config_file(provider, force, upgrade),
+        Commands::Status => commands::status(&provider).await,
+        Commands::Logs { service } => commands::logs(&provider, service.as_deref()).await,
+        Commands::Attach { service } => commands::attach(&provider, service.as_deref()),
+        Commands::Ip { service } => commands::ip(&provider, service.as_deref()).await,
+        Commands::Pull => commands::pull(&provider).await,
+        Commands::Routes { json } => commands::routes(&provider, json),
+        Commands::ConfigFile { force, upgrade } => commands::config_file(&provider, force, upgrade),
+        Commands::InstallSudoRule => commands::install_sudo_rule(),
         Commands::Version => commands::version(),
-        Commands::Proxyd => commands::proxyd(provider).await,
+        Commands::Proxyd => commands::proxyd(&provider).await,
+        Commands::Privileged { cmd } => commands::privileged(cmd),
     }
 }
