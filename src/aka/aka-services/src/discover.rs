@@ -361,6 +361,7 @@ mod tests {
             name: name.into(),
             state: state.into(),
             image: "img".into(),
+            image_id: None,
             env: env
                 .iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))

@@ -253,6 +253,7 @@ impl AkaDocker {
             name,
             state,
             image: config.image.unwrap_or_default(),
+            image_id: inspect.image,
             env,
             labels,
             ports,
@@ -481,15 +482,21 @@ impl AkaDocker {
             })
     }
 
-    pub async fn image_exists(&self, image: &str) -> bool {
+    /// The image id a reference (`name:tag`, `name@digest`) resolves to on
+    /// this machine, or `None` when the engine has no such image.
+    pub async fn image_id(&self, image: &str) -> Option<String> {
         match self.docker.inspect_image(image).await {
-            Ok(_) => true,
-            Err(err) if is_not_found_msg(&err.to_string()) => false,
+            Ok(inspect) => inspect.id,
+            Err(err) if is_not_found_msg(&err.to_string()) => None,
             Err(err) => {
                 warn!("image inspect for {image} failed: {err}");
-                false
+                None
             }
         }
+    }
+
+    pub async fn image_exists(&self, image: &str) -> bool {
+        self.image_id(image).await.is_some()
     }
 
     /// Point `dst` (a `name:tag` reference) at the same image as `src`.

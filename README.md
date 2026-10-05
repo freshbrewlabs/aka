@@ -1,3 +1,8 @@
+<p align="center">
+  <img src="branding/aka-logo.svg#gh-light-mode-only" width="340" alt="aka logo">
+  <img src="branding/aka-logo-dark.svg#gh-dark-mode-only" width="340" alt="aka logo">
+</p>
+
 # aka
 
 Your development proxy for docker — a Rust spiritual successor to
@@ -26,6 +31,9 @@ compiles aka from source (a few minutes). Pin a branch or tag with
 Afterwards `aka update` re-runs the same flow in place — clones the repo
 (default `main`; `--ref <branch|tag>` or `AKA_REF` pins, `AKA_REPO` points at
 a fork), cargo-reinstalls `~/.cargo/bin/aka`, and reports the version change.
+That ref is what installs, so a dirty clone is not: finish an update with
+`aka pull` (images for the new version) and `aka restart`, which recreates any
+service still running an older build and respawns proxyd on the new binary.
 
 Already have a clone? `bin/install.sh` does the same steps in place.
 
@@ -108,15 +116,16 @@ bind-mounted into the proxy and never touched by proxyd (only files ending in
 ## Commands
 
 ```
-aka up                start dns + proxy + admin dashboard + host resolver + proxyd (the daemon)
-aka down              stop everything, remove resolver entries
-aka restart           down + up
+aka up                start dns + proxy + admin dashboard + host resolver + proxyd (the daemon),
+                      recreating any service whose image has since been updated
+aka down              stop + remove the aka containers and the resolver entries; aka up creates them again
+aka restart           down + up — recreates the containers, so pulled images apply
 aka status            container states, daemon health, route table (also http://aka.docker)
 aka routes [--json]   discovered routes (also in ~/.aka/state.json)
 aka logs [dns|proxy|admin]  follow container logs
 aka attach [service]  docker attach to a service container
 aka ip [service]      print a service container IP
-aka pull              pull the managed images (proxy, dns, admin) at this aka version
+aka pull              pull the managed images (proxy, dns, admin) at this aka version; aka up runs them
 aka config-file       write the default config (--force, --upgrade)
 aka update [--ref r]  rebuild + reinstall aka from the repo (default: main)
 aka version
@@ -276,8 +285,12 @@ Images always carry two tags: `$TAG` (`latest`, what the compose files default
 to) and the workspace version — read from Cargo.toml through
 `bin/crate_version.sh`, the same number `aka version` prints and the dashboard's
 healthcheck reports; `aka pull` tries that version tag and moves the configured
-image onto it. `bin/version.sh` prints those versions; `bin/version.sh
-<version>` moves every crate at once (needs cargo-edit: `cargo install
+image onto it (that retag is also how a hub build takes the place of a local
+rebuild carrying the same tag). A moved tag reaches the containers on the next
+`aka up`: it compares the image id a service container was created from with
+the id its image now resolves to, and recreates the container when they
+differ. `bin/version.sh` prints those versions; `bin/version.sh <version>`
+moves every crate at once (needs cargo-edit: `cargo install
 --no-default-features --features set-version cargo-edit`); the next
 `bin/build.sh` publishes both tags.
 

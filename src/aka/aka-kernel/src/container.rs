@@ -11,6 +11,10 @@ pub struct ContainerSummary {
     /// Docker state: `running`, `exited`, ...
     pub state: String,
     pub image: String,
+    /// The image id (`sha256:…`) the container was created from — the content
+    /// it actually runs. `image` is only the reference named at create time,
+    /// so this is what says whether a retagged `name:latest` has landed.
+    pub image_id: Option<String>,
     /// Environment as key/value (entries without `=` are dropped).
     pub env: BTreeMap<String, String>,
     pub labels: BTreeMap<String, String>,

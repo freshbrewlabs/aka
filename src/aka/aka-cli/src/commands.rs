@@ -229,13 +229,13 @@ pub async fn down(provider: &Provider) -> Result<(), BoxedError> {
 
     stop_daemon(paths);
     aka_services::lifecycle::down(docker, cfg).await?;
-    println!("{}: stopped", cfg.dns.container_name);
-    println!("{}: stopped", cfg.proxy.container_name);
-    println!("{}: stopped", cfg.admin.container_name);
+    println!("{}: removed", cfg.dns.container_name);
+    println!("{}: removed", cfg.proxy.container_name);
+    println!("{}: removed", cfg.admin.container_name);
 
     if cfg.resolv.enabled {
-        // the services are already stopped; failing resolver cleanup must
-        // not make `down` itself fail (sudo-free flow: install-sudo-rule)
+        // the containers are already gone; failing resolver cleanup must not
+        // make `down` itself fail (sudo-free flow: install-sudo-rule)
         match aka_services::resolv::clean(cfg) {
             Ok(()) => println!("resolver entries removed"),
             Err(err) => println!("warn: resolver entries not removed: {err}"),
@@ -634,15 +634,16 @@ pub fn update(provider: &Provider, git_ref: Option<&str>) -> Result<(), BoxedErr
     step?;
 
     match installed_version(&installed_bin()).as_deref() {
-        Some(now) if now != was => {
-            println!("==> aka updated {was} -> {now}");
-            println!("the images may have moved too: aka pull");
-        }
+        Some(now) if now != was => println!("==> aka updated {was} -> {now}"),
         Some(now) => println!("==> aka {now} reinstalled from {git_ref}"),
         None => println!("==> aka reinstalled; run `aka version` to see the new version"),
     }
+    // The binary is all this command owns: the images the new aka expects are
+    // a pull away, and the managed containers plus proxyd keep running whatever
+    // they were started from until `aka restart` stops, recreates and respawns.
+    println!("==> next: aka pull, then aka restart (recreates containers, respawns proxyd)");
     if let Some(pid) = daemon_pid(&paths.pid_file()) {
-        println!("proxyd (pid {pid}) still runs the old binary: aka restart");
+        println!("proxyd (pid {pid}) is still running the old binary");
     }
     Ok(())
 }

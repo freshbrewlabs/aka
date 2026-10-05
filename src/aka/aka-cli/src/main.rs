@@ -26,9 +26,10 @@ struct Cli {
 enum Commands {
     /// Bring up aka services (dnsmasq, angie proxy, host resolver, proxyd)
     Up,
-    /// Stop aka services (and remove the host resolver entries)
+    /// Stop and remove the aka containers (and the host resolver entries); aka up
+    /// creates them again, from whatever the image tags name then
     Down,
-    /// Stop and bring up aka services again
+    /// Stop, remove and recreate the aka services (how a freshly pulled image gets applied)
     Restart,
     /// Report the status of the aka services and discovered routes
     Status,
@@ -47,7 +48,7 @@ enum Commands {
         /// dns | proxy (default: proxy)
         service: Option<String>,
     },
-    /// Pull the managed docker images (matching this aka version)
+    /// Pull the managed docker images (matching this aka version); aka up runs them
     Pull,
     /// Show the routes discovered from running containers
     Routes {
@@ -67,7 +68,8 @@ enum Commands {
     /// Install the sudoers rule that makes `aka up`/`aka down` sudo-free
     /// (a one-time sudo; the rule is scoped to aka's own `_privileged` verb)
     InstallSudoRule,
-    /// Rebuild and reinstall the aka binary from the repo (cargo install)
+    /// Rebuild and reinstall the aka binary from the repo (cargo install);
+    /// always the published ref, so a dirty working tree is not what installs
     Update {
         /// Git ref (branch or tag) to update from (default: main, or AKA_REF)
         #[arg(long = "ref")]

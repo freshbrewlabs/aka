@@ -266,7 +266,24 @@ fn bindings(ports: &[(u16, u16, &str, &str)]) -> aka_docker::bollard::models::Po
         .collect()
 }
 
-/// Create/start a service; recreate it when its spec label drifted.
+/// Why a container running the wanted spec is still stale: `aka pull` moves a
+/// tag (`name:latest`, or the retag that pins it to the CLI's version) onto a
+/// new build, and no part of the spec hash can see that — the spec records the
+/// image *reference*. Comparing image ids is what makes `aka up` apply a pull.
+///
+/// An unknown side is never drift: the wanted reference may not be pulled yet,
+/// or the engine may no longer have the image record the container runs from.
+/// Both cases are `aka pull`'s job, not a reason to recreate.
+fn image_drift(running: Option<&str>, wanted: Option<&str>) -> Option<&'static str> {
+    match (running, wanted) {
+        (Some(running), Some(wanted)) if running != wanted => Some("image updated, pulling it in"),
+        _ => None,
+    }
+}
+
+/// Create/start a service; recreate it when its spec label drifted, or when
+/// the image its spec names now points at different content than the running
+/// container was created from (`aka pull` then `aka up`).
 pub async fn ensure_service(
     docker: &AkaDocker,
     name: &str,
@@ -279,29 +296,45 @@ pub async fn ensure_service(
         .cloned()
         .unwrap_or_default();
 
-    match docker.summary_opt(name, "").await? {
-        Some(existing) => {
-            let current = existing.labels.get(LABEL_SPEC).cloned().unwrap_or_default();
+    let Some(existing) = docker.summary_opt(name, "").await? else {
+        docker.create_start(name, body.clone()).await?;
+        return Ok(Ensured::Created);
+    };
 
-            if current != wanted {
-                info!("recreating {name} (config changed)");
-                docker.stop_remove(name).await?;
-                docker.create_start(name, body.clone()).await?;
-                return Ok(Ensured::Recreated);
+    // The wanted image id costs one more inspect, so it is only resolved once
+    // the spec itself agrees; spec drift already explains the recreate.
+    let drift = if existing
+        .labels
+        .get(LABEL_SPEC)
+        .map(String::as_str)
+        .unwrap_or_default()
+        != wanted
+    {
+        Some("config changed")
+    } else {
+        image_drift(
+            existing.image_id.as_deref(),
+            match body.image.as_deref() {
+                Some(image) => docker.image_id(image).await,
+                None => None,
             }
+            .as_deref(),
+        )
+    };
 
-            if existing.state == "running" {
-                return Ok(Ensured::AlreadyRunning);
-            }
-
-            docker.start(name).await?;
-            Ok(Ensured::Started)
-        }
-        None => {
-            docker.create_start(name, body.clone()).await?;
-            Ok(Ensured::Created)
-        }
+    if let Some(drift) = drift {
+        info!("recreating {name} ({drift})");
+        docker.stop_remove(name).await?;
+        docker.create_start(name, body.clone()).await?;
+        return Ok(Ensured::Recreated);
     }
+
+    if existing.state == "running" {
+        return Ok(Ensured::AlreadyRunning);
+    }
+
+    docker.start(name).await?;
+    Ok(Ensured::Started)
 }
 
 /// Bring the enabled services up. Returns (service, outcome) per enabled
@@ -379,14 +412,18 @@ pub async fn up(
     Ok(outcomes)
 }
 
-/// Stop (but keep) the managed containers.
+/// Stop and remove the managed containers, docker-compose `down` style: what
+/// survives is everything mounted in from the host (rendered configs, state)
+/// plus the `aka` network, which route containers from other projects are
+/// attached to. The next `aka up` creates fresh containers, so it always runs
+/// the build the configured image tags name right then.
 pub async fn down(docker: &AkaDocker, cfg: &AkaConfig) -> Result<(), BoxedError> {
     for name in [
         &cfg.dns.container_name,
         &cfg.proxy.container_name,
         &cfg.admin.container_name,
     ] {
-        docker.stop(name).await?;
+        docker.stop_remove(name).await?;
     }
     Ok(())
 }
@@ -441,38 +478,59 @@ pub async fn ip_of(
 /// configured reference is then retagged onto that build, so `aka up` runs
 /// the images that match the CLI. When the hub has no exact version match
 /// (unreleased ref, custom repo), the configured tag is pulled as before.
+///
+/// Pulling only changes what the tags point at; the next `aka up` is what
+/// applies it, because `ensure_service` recreates a container created from
+/// different content than its tag now names.
 pub async fn pull(
     docker: &AkaDocker,
     cfg: &AkaConfig,
     version: &str,
     mut on_line: impl FnMut(&str),
 ) -> Result<(), BoxedError> {
+    let mut moved = false;
+
     for image in [&cfg.dns.image, &cfg.proxy.image, &cfg.admin.image] {
         let (name, tag) = aka_docker::split_image(image);
         let pinned = format!("{name}:{version}");
 
         if tag != version {
-            // A failure here is not fatal: the configured tag is the fallback.
+            // A missing version build is not fatal: the configured tag is the fallback.
             let mut stream = docker.pull(&pinned);
             while let Some(line) = stream.next().await {
                 on_line(&line.unwrap_or_else(|err| format!("error: {err}")));
             }
-            if docker.image_exists(&pinned).await {
-                docker.tag(&pinned, image).await?;
-                on_line(&format!("{image} pinned to {version}"));
+            if let Some(pinned_id) = docker.image_id(&pinned).await {
+                // Retag only when the reference does not already name that
+                // build, so re-pulling an unchanged image says so instead of
+                // sending the user off to `aka up` for nothing.
+                if docker.image_id(image).await.as_ref() != Some(&pinned_id) {
+                    docker.tag(&pinned, image).await?;
+                    moved = true;
+                    on_line(&format!("{image} pinned to {version}"));
+                } else {
+                    on_line(&format!("{image} already at {version}"));
+                }
                 continue;
             }
             on_line(&format!("{pinned} unavailable; falling back to {image}"));
         }
 
+        // Nothing to pin and nothing to fetch: the local build stays as it is
+        // (offline-friendly), so the line says the hub was not consulted.
         if docker.image_exists(image).await {
-            on_line(&format!("{image} already present"));
+            on_line(&format!("{image} already present (left as is)"));
             continue;
         }
         let mut stream = docker.pull(image);
         while let Some(line) = stream.next().await {
             on_line(&line?);
         }
+        moved = true;
+    }
+
+    if moved {
+        on_line("aka up to run them: a service on an older build is recreated");
     }
     Ok(())
 }
@@ -480,6 +538,22 @@ pub async fn pull(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_moved_tag_is_drift_and_an_unknown_is_not() {
+        // The spec (and so the container's `image` reference) is identical in
+        // every case here: only the content the tag points at moved.
+        assert_eq!(
+            image_drift(Some("sha256:old"), Some("sha256:new")),
+            Some("image updated, pulling it in")
+        );
+        assert_eq!(image_drift(Some("sha256:same"), Some("sha256:same")), None);
+
+        // Nothing to compare against, either side: leave the container alone.
+        assert_eq!(image_drift(None, Some("sha256:new")), None);
+        assert_eq!(image_drift(Some("sha256:old"), None), None);
+        assert_eq!(image_drift(None, None), None);
+    }
 
     fn paths() -> AkaPaths {
         AkaPaths {
