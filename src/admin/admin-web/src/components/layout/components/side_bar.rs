@@ -1,7 +1,7 @@
 use leptos::prelude::*;
 use leptos_router::components::A;
 
-use crate::components::layout::components::icons::{DashboardIcon, RoutesIcon};
+use crate::components::layout::components::icons::{RoutesIcon, StatusIcon};
 use crate::components::logo::Logo;
 use crate::features::healthcheck::components::Healthcheck;
 
@@ -22,7 +22,7 @@ pub fn SideBar() -> impl IntoView {
                         <NavItem
                             text="Status"
                             href="/dashboard"
-                            icon=move || view! { <DashboardIcon class="nav-icon" /> }
+                            icon=move || view! { <StatusIcon class="nav-icon" /> }
                             badge=None
                         />
                         <NavItem

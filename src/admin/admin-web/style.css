@@ -1,12 +1,13 @@
 :root {
-    --bg: #0f172a;
-    --panel: #1e293b;
-    --border: #334155;
-    --text: #e2e8f0;
-    --muted: #94a3b8;
-    --accent: #38bdf8;
+    /* Same palette as the public site (src/public/index.html). */
+    --bg: #0e0e10;
+    --panel: #18181b;
+    --border: rgba(255, 255, 255, 0.06);
+    --text: #f0efed;
+    --muted: #8a8a8e;
+    --accent: #d4872a;
     --danger: #f87171;
-    --ok: #4ade80;
+    --ok: #9ece6a;
     --warn: #facc15;
 }
 
@@ -69,7 +70,7 @@ body {
     cursor: pointer;
 }
 
-.nav-link:hover { background: rgba(148, 163, 184, 0.1); color: var(--text); }
+.nav-link:hover { background: rgba(212, 135, 42, 0.08); color: var(--text); }
 
 .nav-icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; }
 
