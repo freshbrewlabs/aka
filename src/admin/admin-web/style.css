@@ -39,14 +39,12 @@ body {
 .logo {
     display: flex;
     align-items: center;
-    gap: 8px;
     color: var(--text);
-    font-weight: 700;
-    font-size: 18px;
     text-decoration: none;
 }
 
-.logo-icon { width: 24px; height: 24px; }
+/* The full wordmark: a 252x94 viewBox, so width follows height. */
+.logo-mark { height: 40px; width: auto; }
 
 .sidebar-nav { flex: 1; margin-top: 24px; }
 

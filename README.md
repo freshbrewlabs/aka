@@ -1,6 +1,6 @@
 <p align="center">
-  <img src="branding/aka-logo.svg#gh-light-mode-only" width="340" alt="aka logo">
-  <img src="branding/aka-logo-dark.svg#gh-dark-mode-only" width="340" alt="aka logo">
+  <img src="docs/design/aka-logo.svg#gh-light-mode-only" width="340" alt="aka logo">
+  <img src="docs/design/aka-logo-dark.svg#gh-dark-mode-only" width="340" alt="aka logo">
 </p>
 
 # aka

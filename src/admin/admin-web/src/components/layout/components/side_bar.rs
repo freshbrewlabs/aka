@@ -10,9 +10,8 @@ pub fn SideBar() -> impl IntoView {
     view! {
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <A href="/dashboard" attr:class="logo">
-                    <Logo class="logo-icon" />
-                    <span>"aka admin"</span>
+                <A href="/dashboard" attr:class="logo" attr:aria-label="aka admin">
+                    <Logo class="logo-mark" />
                 </A>
             </div>
 
