@@ -43,7 +43,7 @@ body {
     text-decoration: none;
 }
 
-/* The full wordmark: a 252x94 viewBox, so width follows height. */
+/* The full wordmark: a 243x94 viewBox, so width follows height. */
 .logo-mark { height: 40px; width: auto; }
 
 .sidebar-nav { flex: 1; margin-top: 24px; }
@@ -69,6 +69,8 @@ body {
 }
 
 .nav-link:hover { background: rgba(224, 123, 39, 0.08); color: var(--text); }
+
+.nav-link[aria-current="page"] { background: rgba(224, 123, 39, 0.14); color: var(--accent); }
 
 .nav-icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; }
 

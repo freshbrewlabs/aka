@@ -8,7 +8,7 @@ pub fn Logo(class: &'static str) -> impl IntoView {
     view! {
         <svg
             class=class
-            viewBox="-12 24 252 94"
+            viewBox="-12 24 243 94"
             fill="none"
             stroke-width="15"
             stroke-linecap="round"
@@ -17,8 +17,8 @@ pub fn Logo(class: &'static str) -> impl IntoView {
         >
             <circle cx="40" cy="70" r="30" stroke="currentColor" />
             <path d="M70 42V102" stroke="currentColor" />
-            <circle cx="190" cy="70" r="30" stroke="currentColor" />
-            <path d="M220 42V102" stroke="currentColor" />
+            <circle cx="181" cy="70" r="30" stroke="currentColor" />
+            <path d="M211 42V102" stroke="currentColor" />
             <path d="M100 42V102" stroke="#e07b27" />
             <path d="M100 72L133 42" stroke="#e07b27" />
             <path d="M100 72L133 102" stroke="#e07b27" />

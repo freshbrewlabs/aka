@@ -274,8 +274,8 @@ nothing). See `src/admin/README.md`.
 bin/build.sh       # every src/**/build.sh, pushed to $HUB_NAMESPACE (dewey4iv,
                    # on Docker Hub) and $REGISTRY_NAMESPACE
                    # (registry.freshbrewlabs.cloud/aka) as :$TAG (`latest`) and
-                   # :<crate version> — aka-proxy + aka-dns multi-arch,
-                   # aka-admin (dashboard) for one arch
+                   # :<crate version> — aka-proxy, aka-dns and aka-admin all
+                   # pushed linux/amd64 + linux/arm64
 bin/version.sh 0.2.0   # every crate to one version, so the version tag moves
                         # with it (no arguments: show; cargo-edit underneath)
 bin/unit_test.sh   # cargo test --workspace

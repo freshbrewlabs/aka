@@ -54,12 +54,18 @@ an origin:
 | `/dashboard`, `/routes` | `index.html` (client-side router) |
 | `/*_bg.wasm`, `/*.css` | trunk's hashed bundles |
 
-The image is built in two stages: `registry.freshbrewlabs.cloud/base/rust-dev` (the
-same dev image the compose services run) installs trunk + the wasm target,
-`cargo build --release -p admin-api` and `trunk build --release`, with registry
-and target cache mounts so a rebuild recompiles what changed;
-`debian:trixie-slim` (the builder's libc, and nothing else the API links) is the
-runtime with the binary and `/usr/share/aka-admin/web`.
+The image is built in three stages, every one of them compiling on the
+builder's own architecture: `registry.freshbrewlabs.cloud/base/rust-dev` (the
+same dev image the compose services run) installs trunk + the wasm target and
+runs `trunk build --release` — wasm is one bundle for every arch, so that stage
+is builder-pinned and BuildKit resolves it once per multi-arch invocation, not
+once per arch — and a second builder-pinned stage runs
+`cargo build --release -p admin-api --target <x86_64|aarch64>-unknown-linux-gnu`:
+rust-dev carries both rustup targets and both cross gcc's, so the foreign
+binary is cross-linked rather than emulated. Both stages use registry and target
+cache mounts so a rebuild recompiles what changed; `debian:trixie-slim` (glibc
+2.41, the same version rust-dev's cross libc is built against, and nothing else
+the API links) is the runtime with the binary and `/usr/share/aka-admin/web`.
 
 ```bash
 bash src/admin/build.sh                              # :latest + :<version>, tagged and pushed under
@@ -75,13 +81,12 @@ the sidebar report, read from Cargo.toml by `bin/crate_version.sh`.
 
 Two things worth knowing: the build context is the **repo root** — `admin-api`
 reads aka's state through aka's own crates, so the workspace has to be in the
-build (`.dockerignore` is what keeps that context small) — and the image is
-built for the builder's platform only, so the pushed `:latest` names one
-architecture. aka-proxy/aka-dns are configuration on top of a published base and
-ship multi-arch; a Rust plus wasm compile is not cross-targeted here. `aka pull`
-fetches this image together with the other two (at its version tag), so the
-pushed build must match your architecture; a machine of another arch rebuilds the tag
-with this same script.
+build (`.dockerignore` is what keeps that context small) — and the image ships
+**linux/amd64 + linux/arm64**, like aka-proxy/aka-dns, so the pushed `:latest`
+is a multi-arch index and `aka pull` gets the right binary on either arch. The
+arm64 build is cross-linked, not emulated (see the stages above), which is why
+the second architecture costs a link instead of an hour of QEMU; the local tags
+`--no-push` leaves behind are the builder's own arch.
 
 `admin-api` serves the dashboard only when the build is present
 (`ADMIN_WEB_DIR`, default `/usr/share/aka-admin/web`) and the API alone when it

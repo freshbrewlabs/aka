@@ -33,7 +33,7 @@ digests, all platforms).
 | unit-specs.yml | same | `bin/unit_test.sh` |
 | after-specs.yml | same | Slack notification gate; builds depend on it |
 | aka-{proxy,dns}-build.yml | tag `v*` **only** | buildx → Harbor amd64+arm64 `:<aka-cli ver>,latest` → hub-mirror |
-| aka-admin-build.yml | tag `v*` **only** | buildx on an amd64 node → Harbor `:<admin-api ver>,latest` → hub-mirror |
+| aka-admin-build.yml | tag `v*` **only** | buildx (cross-linked) on an amd64 node → Harbor amd64+arm64 `:<admin-api ver>,latest` → hub-mirror |
 | after-build.yml | tag `v*` | Slack notification; terminal marker |
 
 A tag is the only thing that produces an image. Tags come from the crate
@@ -78,9 +78,8 @@ together when updating.
 - PR touching `src/**/*.rs` → lint + unit run, after-specs aggregates + Slack.
 - `git tag v0.3.4 && git push --tags` → specs first, then the three builds;
   check `aka/aka-{proxy,dns,admin}:0.3.4` + `:latest` in the Harbor UI **and**
-  `dewey4iv/aka-*` on Docker Hub. `docker buildx imagetools inspect` both:
-  proxy/dns list amd64 **and** arm64 in each registry (admin amd64 only —
-  by design).
+  `dewey4iv/aka-*` on Docker Hub. `docker buildx imagetools inspect` both: all
+  three images list amd64 **and** arm64 in each registry.
 - Grep of `workflows/` for `kubectl|helm|argocd` must stay empty.
 
 ## Gotchas
@@ -89,9 +88,10 @@ together when updating.
   `plugin-docker-buildx` with `privileged: true` (the plugin starts its own
   dockerd). This repo must stay **trusted** in Woodpecker, like rolodex's.
 - proxy/dns are multi-arch via QEMU binfmt (config on top of angie/alpine —
-  no compile). The admin image is a Rust+wasm compile, amd64-only by design
-  (`src/admin/build.sh` never cross-builds it); arm64 machines rebuild it
-  locally and it's pinned to an amd64 node.
+  no compile). The admin image is multi-arch too, but by cross-linking: its
+  Rust stages are `$BUILDPLATFORM`-pinned (`devops/docker/aka-admin/Dockerfile`)
+  so nothing is emulated, and the amd64 node pin only keeps the compile itself
+  off the Pis.
 - Harbor project `aka` is **private**: anything pulling `aka-admin` etc. from
   the registry (compose files name it) needs `docker login` — that's why the
   Rust default config keeps pointing at the public hub mirror.

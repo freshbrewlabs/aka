@@ -1,6 +1,9 @@
-# Tag-only. Rust + trunk/wasm compile, deliberately amd64-only — matching
-# src/admin/build.sh, which never cross-builds this image; arm64 machines
-# rebuild locally. Pinned to an amd64 node so the compile never lands on a Pi.
+# Tag-only. Rust + trunk/wasm compile, shipped linux/amd64 + linux/arm64 like
+# aka-proxy/aka-dns: every Rust stage in devops/docker/aka-admin/Dockerfile is
+# pinned to $BUILDPLATFORM and the API is cross-linked for the target, so the
+# second arch adds a link, not an emulated compile (and the runtime stage has no
+# RUN, so no arm64 code is ever executed). Pinned to an amd64 node so the
+# compile never lands on a Pi; src/admin/build.sh does the same locally.
 steps:
   - name: version-tags
     image: alpine
@@ -17,7 +20,7 @@ steps:
       pull_image: true
       dockerfile: devops/docker/aka-admin/Dockerfile   # context = repo root:
       context: .                                       # admin-api compiles aka's crates
-      platforms: linux/amd64
+      platforms: linux/amd64,linux/arm64   # cross-linked, not QEMU-compiled
       build_args:
         - RUST_DEV_IMAGE_VERSION=v1.99.1    # keep in lockstep with the Dockerfile
         - DEBIAN_SLIM_BASE_IMAGE_VERSION=trixie-slim   # ARG defaults + stylance
@@ -31,7 +34,7 @@ steps:
           kubernetes.io/arch: amd64         # Pi nodes are arm64 capacity
 
   # Mirror the pushed image to the public Docker Hub mirror (see
-  # aka-proxy-build.yml): same digest, single amd64 arch.
+  # aka-proxy-build.yml): same digest, both arches in the copied index.
   - name: hub-mirror
     image: alpine:3.22
     environment:

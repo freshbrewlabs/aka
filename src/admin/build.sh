@@ -13,13 +13,13 @@ set -euo pipefail
 #   ./build.sh            # local tags + push to both names
 #   ./build.sh --no-push  # local tags only
 #
-# Local platform only, and the pushed tag therefore names one architecture:
-# this is a Rust and wasm compile, not configuration on top of a published base,
-# so it is not cross-built the way aka-proxy/aka-dns are (src/aka/build.sh). The
-# dashboard stack is a single-machine dev tool — `aka pull` fetches it with the
-# other images, and the pushed :latest names one arch, so a machine of another
-# arch rebuilds the tag from source with this script. bin/build.sh runs every
-# src/**/build.sh, including this one.
+# Published for linux/amd64 + linux/arm64 ($PLATFORMS), like aka-proxy and
+# aka-dns: the Rust stages in the Dockerfile run on the builder's own
+# architecture and cross-link the API, so the extra platform costs no emulated
+# compile and no arm64 runner. The local tags are still the builder's own arch
+# (buildx `--push` can't also `--load`), which is what `aka pull` and
+# src/admin/docker-compose.yml run; bin/build.sh runs every src/**/build.sh,
+# including this one.
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 
@@ -29,6 +29,7 @@ REGISTRY_NAMESPACE="${REGISTRY_NAMESPACE:-registry.freshbrewlabs.cloud/aka}"
 NAMES=("$REGISTRY_NAMESPACE")
 if [ -n "${HUB_NAMESPACE:-}" ]; then NAMES+=("$HUB_NAMESPACE"); fi
 TAG="${TAG:-latest}"
+PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
 PUSH=1
 
 # $root, not a relative path: bin/build.sh runs this file from its own directory
@@ -52,14 +53,15 @@ for ns in "${NAMES[@]}"; do
 done
 
 # The context is the repo root (see the Dockerfile), not this directory.
+if [ "$PUSH" = 1 ]; then
+    # buildx --push can't --load, so the local tags are a separate build
+    docker buildx build --platform "$PLATFORMS" "${tag_args[@]}" --push \
+        -f devops/docker/aka-admin/Dockerfile .
+fi
 docker build "${tag_args[@]}" -f devops/docker/aka-admin/Dockerfile .
 
 if [ "$PUSH" = 1 ]; then
-    # A plain push of the local tags: single platform, so no buildx split.
-    for ref in "${refs[@]}"; do
-        docker push "$ref"
-    done
-    echo "pushed ${refs[*]} ($(docker image inspect "$REGISTRY_NAMESPACE/aka-admin:$TAG" --format '{{.Os}}/{{.Architecture}}'))"
+    echo "pushed ${refs[*]} for $PLATFORMS"
 fi
 
-echo "tagged ${refs[*]} locally"
+echo "tagged ${refs[*]} locally ($(docker image inspect "$REGISTRY_NAMESPACE/aka-admin:$TAG" --format '{{.Os}}/{{.Architecture}}'))"

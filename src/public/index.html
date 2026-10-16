@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="theme-color" content="#0e0e10" />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='86 28 61 88'%3E%3Cg fill='none' stroke='%23e07b27' stroke-width='15' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M100 42V102'/%3E%3Cpath d='M100 72L133 42'/%3E%3Cpath d='M100 72L133 102'/%3E%3C/g%3E%3C/svg%3E" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='90.5 28 52 88'%3E%3Cg fill='none' stroke='%23e07b27' stroke-width='15' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M100 42V102'/%3E%3Cpath d='M100 72L133 42'/%3E%3Cpath d='M100 72L133 102'/%3E%3C/g%3E%3C/svg%3E" />
 <title>aka — your development proxy for docker</title>
 <meta name="description" content="aka turns Docker containers into hostnames. Set VIRTUAL_HOST, run aka up, open http://that-host.docker — HTTP, HTTPS, TLS passthrough and raw TCP, with no sudo prompts." />
 <meta property="og:title" content="aka — your development proxy for docker" />
@@ -266,10 +266,12 @@
     <div class="code"><button class="copy" data-target="install-cmd">copy</button><pre><span id="install-cmd"><span class="p">curl</span> -fsSL <span class="s">https://raw.githubusercontent.com/freshbrewlabs/aka/main/install.sh</span> | bash</span></pre></div>
     <p class="install-note">
       Needs <code>git</code>, a running Docker, and Rust (<code>cargo</code>) —
-      the script checks all three. Builds the managed proxy/DNS images, installs
-      the <code>aka</code> binary into <code>~/.cargo/bin</code>, writes a
-      commented <code>~/.aka.toml</code>. Nothing needs sudo. Pin a version with
-      <code>AKA_REF=v1.2.3</code>; re-run any time to update.
+      the script checks all three. Installs the <code>aka</code> binary into
+      <code>~/.cargo/bin</code> and writes a commented <code>~/.aka.toml</code>.
+      No docker images are built: they're published, and <code>aka pull</code>
+      fetches the proxy / DNS / dashboard images tagged with your aka version.
+      Nothing needs sudo. Pin a version with <code>AKA_REF=v1.2.3</code>;
+      <code>aka update</code> re-runs the same flow in place.
     </p>
   </section>
 
@@ -277,12 +279,14 @@
     <h2>Quick start</h2>
     <div class="code"><button class="copy" data-target="qs-cmd">copy</button><pre><span id="qs-cmd"><span class="c"># one-time: passwordless sudoers rule so `aka up` never prompts</span>
 <span class="p">aka</span> install-sudo-rule
+<span class="p">aka</span> pull                        <span class="c"># fetch the published images</span>
 
 <span class="c"># any running container with VIRTUAL_HOST is routed automatically</span>
 <span class="p">docker</span> run -d -e VIRTUAL_HOST=demo nginx
 
 <span class="p">aka</span> up
-<span class="p">curl</span> http://demo.docker          <span class="c"># -> nginx welcome page</span>
+<span class="p">curl</span> http://demo.docker         <span class="c"># -> nginx welcome page</span>
+<span class="p">curl</span> http://aka.docker          <span class="c"># -> the aka status dashboard</span>
 <span class="p">aka</span> status</span></pre></div>
   </section>
 
@@ -320,17 +324,30 @@
         <p>A daemon watches docker events; new containers are routed live,
         no proxy reload, no container restarts.</p>
       </div>
+      <div class="card">
+        <h3><span class="t">aka.docker</span> dashboard</h3>
+        <p>The web twin of <code>aka status</code> — container states, daemon
+        health and the route table, loopback-only with no auth.</p>
+      </div>
+      <div class="card">
+        <h3><span class="t">cert-gen</span> trusted https</h3>
+        <p><code>aka cert-gen &lt;host&gt;</code> issues the cert from aka's own local
+        CA and trusts it in your system — <code>https://&lt;host&gt;</code> goes green.</p>
+      </div>
     </div>
   </section>
 
   <section id="commands">
     <h2>Commands</h2>
     <div class="cmds">
-      <span class="cmd">aka up</span>          <span class="desc">start dns + proxy + host resolver</span>
+      <span class="cmd">aka up</span>          <span class="desc">start dns + proxy + admin dashboard + host resolver + daemon</span>
       <span class="cmd">aka down</span>        <span class="desc">stop everything, clean up resolver entries</span>
-      <span class="cmd">aka status</span>      <span class="desc">container states, daemon health, route table</span>
+      <span class="cmd">aka restart</span>      <span class="desc">down + up, so pulled images apply</span>
+      <span class="cmd">aka pull</span>        <span class="desc">fetch the managed images for this aka version</span>
+      <span class="cmd">aka status</span>      <span class="desc">container states, daemon health, route table (also http://aka.docker)</span>
       <span class="cmd">aka routes</span>      <span class="desc">discovered routes (--json)</span>
-      <span class="cmd">aka logs</span>        <span class="desc">follow dns / proxy container logs</span>
+      <span class="cmd">aka logs</span>        <span class="desc">follow dns / proxy / admin container logs</span>
+      <span class="cmd">aka update</span>      <span class="desc">rebuild + reinstall aka from the repo</span>
     </div>
   </section>
 

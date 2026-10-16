@@ -27,7 +27,7 @@ same-name Docker Hub mirror `dewey4iv/aka-*` (update 2 above):
 
 - `registry.freshbrewlabs.cloud/aka/aka-proxy:<aka-cli version>,latest` (linux/amd64 + linux/arm64)
 - `registry.freshbrewlabs.cloud/aka/aka-dns:<aka-cli version>,latest` (linux/amd64 + linux/arm64)
-- `registry.freshbrewlabs.cloud/aka/aka-admin:<admin-api version>,latest` (single arch, see below)
+- `registry.freshbrewlabs.cloud/aka/aka-admin:<admin-api version>,latest` (linux/amd64 + linux/arm64; see the 2026-10-16 update under aka-admin-build.yml)
 
 Tagging convention matches `src/aka/build.sh` / `src/admin/build.sh`: proxy/dns
 carry the `aka-cli` crate version ("the version `aka version` prints"), admin
@@ -262,11 +262,22 @@ Same dind + DinD env + `depends_on: after-specs` + tag-only `when`. Deltas:
 - `repo: registry.freshbrewlabs.cloud/aka/aka-admin`
 - `dockerfile: devops/docker/aka-admin/Dockerfile`, `context: .` (repo root —
   admin-api compiles against aka's crates; root `.dockerignore` exists)
-- `platforms: linux/amd64` **only** + `backend_options.kubernetes.nodeSelector:
-  kubernetes.io/arch: amd64` — this is a Rust + trunk/wasm compile; per
-  `src/admin/build.sh` it is deliberately never cross-built, and compiling
-  wasm under QEMU on the tag deadline would take an hour+. Arm64 users rebuild
-  locally (the documented status quo).
+- `platforms: linux/amd64,linux/arm64` — **updated 2026-10-16**. The first
+  version of this workflow shipped `linux/amd64` only, on the reasoning that a
+  Rust + trunk/wasm compile under QEMU would take an hour+ on the tag deadline.
+  That reasoning still holds for an emulated compile, so the build was made
+  non-emulated instead: every Rust stage in
+  `devops/docker/aka-admin/Dockerfile` is `--platform=$BUILDPLATFORM` (compile
+  on the builder, cross-link for the target — `rust-dev` already carries both
+  `unknown-linux-gnu` rustup targets plus both cross gcc's at trixie's glibc
+  2.41), the trunk stage is builder-pinned so BuildKit runs it once per
+  invocation rather than once per arch, and the runtime stage has no `RUN`, so
+  assembling the arm64 image never executes arm64 code. Only `ring` builds C in
+  admin-api's tree; the `cc` crate picks up `aarch64-linux-gnu-gcc` by name.
+  `nodeSelector: kubernetes.io/arch: amd64` stays — it keeps the compile off the
+  Pis, it no longer decides the image's arch. Same shape in `src/admin/build.sh`
+  (`PLATFORMS`, buildx `--push` for the index + a plain `docker build` for the
+  local tags).
 - `build_args: [RUST_DEV_IMAGE_VERSION=v1.99.1, DEBIAN_SLIM_BASE_IMAGE_VERSION=trixie-slim]`
   (matches the Dockerfile ARG defaults and stylance's dev container; lockstep
   note, same as rolodex's).
@@ -328,5 +339,5 @@ Hub (`dewey4iv`). Two decisions (second one supersedes the first's CI leg):
   (Dockerfile ARG defaults + workflow build_args + stylance).
 - Decide Docker Hub's fate (see build.sh section); rotate the plaintext vizer
   `drone-bot` password rolodex's plan still flags.
-- `aka-admin` arm64 image only if the dashboard is ever meant to run on a Pi
-  unattended (would need a buildx cross-compile or an arm64 runner).
+- DONE 2026-10-16 — `aka-admin` ships arm64 too: cross-linked buildx (see the
+  aka-admin-build.yml update above), no arm64 runner and no emulated compile.

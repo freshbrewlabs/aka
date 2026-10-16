@@ -7,7 +7,7 @@ use crate::features::status::components::{RoutesPage, StatusPage};
 pub fn Navigation() -> impl IntoView {
     view! {
         <Routes fallback=|| "Not Found">
-            <Route path=path!("/") view=|| view! { <StatusPage /> } />
+            <Route path=path!("/") view=|| view! { <Redirect path="/dashboard" /> } />
             <Route path=path!("/dashboard") view=|| view! { <StatusPage /> } />
             <Route path=path!("/routes") view=|| view! { <RoutesPage /> } />
         </Routes>
