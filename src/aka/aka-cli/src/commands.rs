@@ -676,7 +676,7 @@ pub fn cert_gen(
             );
             Ok(())
         }
-        (None, false, false, false, true) => clean_certs(&exec, &home, &stores, &cfg, &ca_dir),
+        (None, false, false, false, true) => clean_certs(&exec, &home, &stores, cfg, &ca_dir),
         (Some(_), ..) => {
             Err("a host cannot be combined with --ca/--trust/--untrust/--clean".into())
         }

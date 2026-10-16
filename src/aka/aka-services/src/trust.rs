@@ -406,7 +406,6 @@ mod tests {
     /// filesystem-gated probe paths are deliberate in every test.
     struct FakeHome {
         path: PathBuf,
-        has_nssdb: bool,
     }
 
     impl FakeHome {
@@ -419,7 +418,7 @@ mod tests {
             } else {
                 std::fs::create_dir_all(&path).unwrap();
             }
-            Self { path, has_nssdb }
+            Self { path }
         }
     }
 

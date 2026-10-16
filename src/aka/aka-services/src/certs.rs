@@ -439,8 +439,7 @@ mod tests {
 
     // ------------------------------------------------------ cert-gen tests
 
-    use super::*;
-    use x509_parser::prelude::{FromDer as _, X509Certificate};
+    use x509_parser::prelude::X509Certificate;
 
     /// Temp dir removed on drop — leaked fixtures survive neither pass nor fail.
     struct TempDir(PathBuf);
