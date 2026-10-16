@@ -2,21 +2,38 @@
 # Deploys stay manual (`aka up` / docker compose); no workflow here must ever
 # touch a cluster (deployment tooling must never appear in workflows/).
 steps:
+  # plugins/slack is drone-slack: Woodpecker's compat layer bakes
+  # DRONE_BUILD_STATUS="success" and DRONE_BUILD_STARTED=0 into the plugin env
+  # at queue time, so that plugin can never report failures or a real
+  # duration (since 0 = 1970 = 497828h). Curl runtime CI_* vars instead.
   - name: builds-completed
-    image: plugins/slack
-    settings:
-      webhook:
+    image: curlimages/curl:8.23.0
+    environment:
+      SLACK_WEBHOOK_URL:
         from_secret: slack_webhook
-      link_names: true
-      template: >
-        {{#success build.status}}
-          builds:`${CI_COMMIT_REF}` have passed.
-          took: {{since build.started}}
-          {{build.link}}
-        {{else}}
-          builds:`${CI_COMMIT_REF}` have failed.
-          {{build.link}}
-        {{/success}}
+    when:
+      - status: [success, failure]
+    commands:
+      - |
+        if [ "$CI_PIPELINE_STATUS" = "success" ]; then EMOJI="✅"; VERB="have passed."; else EMOJI="❌"; VERB="have failed."; fi
+        if [ -n "$CI_COMMIT_TAG" ]; then
+          WHERE="tag $CI_COMMIT_TAG"
+        elif [ -n "$CI_COMMIT_SOURCE_BRANCH" ]; then
+          WHERE="PR #$CI_COMMIT_PULL_REQUEST $CI_COMMIT_SOURCE_BRANCH -> $CI_COMMIT_TARGET_BRANCH"
+        elif [ -n "$CI_COMMIT_BRANCH" ]; then
+          WHERE="branch $CI_COMMIT_BRANCH"
+        else
+          WHERE="$CI_COMMIT_REF"
+        fi
+        NOW=$(date +%s)
+        START="$CI_PIPELINE_STARTED"
+        if [ -z "$START" ] || [ "$START" = "0" ]; then START="$NOW"; fi
+        D=$(( NOW - START ))
+        H=$(( D / 3600 ))
+        M=$(( (D % 3600) / 60 ))
+        S=$(( D % 60 ))
+        if [ "$H" -gt 0 ]; then DUR=$(printf '%sh%sm%ss' "$H" "$M" "$S"); else DUR=$(printf '%sm%ss' "$M" "$S"); fi
+        curl -fsS --retry 3 -X POST -H 'content-type: application/json' --data "{\"text\": \"$EMOJI *$CI_REPO* builds on $WHERE $VERB\ntook: $DUR\n<$CI_PIPELINE_URL>\"}" "$SLACK_WEBHOOK_URL"
 
 depends_on:
   - aka-proxy-build

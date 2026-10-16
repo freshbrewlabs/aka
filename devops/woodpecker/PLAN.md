@@ -161,20 +161,22 @@ build will show it; escape hatch is adding the dind service + a
 ```yaml
 steps:
   - name: tests-completed
-    image: plugins/slack
-    settings:
-      webhook:
+    # plugins/slack (drone-slack) cannot work here: Woodpecker hardwires
+    # DRONE_BUILD_STATUS="success" and bakes DRONE_BUILD_STARTED=0 at queue
+    # time, so the plugin always posts "passed" with a since-1970 duration.
+    # Curl the webhook from runtime CI_* env instead.
+    image: curlimages/curl:8.23.0
+    environment:
+      SLACK_WEBHOOK_URL:
         from_secret: slack_webhook
-      link_names: true
-      template: >
-        {{#success build.status}}
-          tests:`${CI_COMMIT_REF}` have passed.
-          took: {{since build.started}}
-          {{build.link}}
-        {{else}}
-          tests:`${CI_COMMIT_REF}` have failed.
-          {{build.link}}
-        {{/success}}
+    when:
+      - status: [success, failure]
+    commands:
+      - |
+        # full script in workflows/after-specs.yml — branch on
+        # CI_PIPELINE_STATUS, label = tag / PR # / branch from CI_COMMIT_*,
+        # took = now - CI_PIPELINE_STARTED, post {text} incl. CI_REPO and
+        # CI_PIPELINE_URL to the webhook.
 
 depends_on:
   - name: lint-check
@@ -285,7 +287,7 @@ Same dind + DinD env + `depends_on: after-specs` + tag-only `when`. Deltas:
 ### after-build.yml
 
 `depends_on: [aka-proxy-build, aka-dns-build, aka-admin-build]`,
-`when: tag v*`, `plugins/slack` step — terminal marker (push IS the end state;
+`when: tag v*`, curl-based Slack notification step — terminal marker (push IS the end state;
 no grep of `workflows/` may ever match `kubectl|helm|argocd|docker compose up`).
 
 ## `build.sh` change — DONE 2026-10-15
