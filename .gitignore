@@ -5,7 +5,8 @@ dist/
 # Environment files
 .env
 *.env.secrets
-*.env
+# woodpecker/CI secrets plaintext (crypt-keeper wraps keybase); committed as *.enc
+secrets/*.json
 *.env.development
 *.env.staging
 *.env.production

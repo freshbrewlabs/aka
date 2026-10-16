@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Decrypt the team's committed *.enc overlays into their plaintext files:
+#   secrets/secrets.json
+# (gitignored). Runs crypt-keeper, which wraps `keybase ... --team freshbrewlabs`
+# over ./secrets/*.json (aka has no helm values dirs). Requires keybase logged
+# in with a device on the freshbrewlabs team.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
+command -v crypt-keeper >/dev/null || { echo "crypt-keeper is required"; exit 1; }
+crypt-keeper decrypt

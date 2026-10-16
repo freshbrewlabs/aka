@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Encrypt the plaintext secret overlays into committed *.enc files (same set as
+# bin/decrypt). Edit plaintext first, run this from anywhere, then COMMIT the
+# regenerated .enc files with your work:
+#   secrets/secrets.json.enc
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
+command -v crypt-keeper >/dev/null || { echo "crypt-keeper is required"; exit 1; }
+crypt-keeper encrypt

@@ -1,0 +1,15 @@
+# Mirrors bin/unit_test.sh (`cargo test --workspace`). aka has no DB-backed
+# tests, so there is no integration-specs workflow.
+steps:
+  - name: cargo-test
+    image: rust:1.99
+    commands:
+      - bin/unit_test.sh
+
+when:
+  - event: tag
+    ref: refs/tags/v*
+  - event: pull_request
+    path: 'src/**/{*.rs,Cargo.toml,Cargo.lock}'
+  - event: push
+    branch: main

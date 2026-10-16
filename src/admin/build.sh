@@ -3,8 +3,7 @@ set -euo pipefail
 
 # Build aka's dashboard image — the API plus the dashboard it serves, one
 # container — tagged the way src/admin/docker-compose.yml expects it, and
-# published under two names — Docker Hub ($HUB_NAMESPACE) and the FBL registry
-# ($REGISTRY_NAMESPACE).
+# published to the FBL registry ($REGISTRY_NAMESPACE).
 #
 # Two tags, like aka's other images: $TAG (`latest`, what compose defaults to)
 # and the version of the `admin-api` crate, which is what the healthcheck and
@@ -24,11 +23,11 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 
-# Both names, like src/aka/build.sh: the hub repo is public, the FBL registry
-# is what src/admin/docker-compose.yml names.
-HUB_NAMESPACE="${HUB_NAMESPACE:-dewey4iv}"
+# The FBL registry is the only default target, like src/aka/build.sh; set
+# HUB_NAMESPACE to co-push the public mirror (Docker Hub) as well.
 REGISTRY_NAMESPACE="${REGISTRY_NAMESPACE:-registry.freshbrewlabs.cloud/aka}"
-NAMES=("$HUB_NAMESPACE" "$REGISTRY_NAMESPACE")
+NAMES=("$REGISTRY_NAMESPACE")
+if [ -n "${HUB_NAMESPACE:-}" ]; then NAMES+=("$HUB_NAMESPACE"); fi
 TAG="${TAG:-latest}"
 PUSH=1
 
@@ -44,7 +43,7 @@ for arg in "$@"; do
     esac
 done
 
-# Both names, two tags each.
+# One or two names, two tags each.
 tag_args=()
 refs=()
 for ns in "${NAMES[@]}"; do
@@ -60,7 +59,7 @@ if [ "$PUSH" = 1 ]; then
     for ref in "${refs[@]}"; do
         docker push "$ref"
     done
-    echo "pushed ${refs[*]} ($(docker image inspect "$HUB_NAMESPACE/aka-admin:$TAG" --format '{{.Os}}/{{.Architecture}}'))"
+    echo "pushed ${refs[*]} ($(docker image inspect "$REGISTRY_NAMESPACE/aka-admin:$TAG" --format '{{.Os}}/{{.Architecture}}'))"
 fi
 
 echo "tagged ${refs[*]} locally"

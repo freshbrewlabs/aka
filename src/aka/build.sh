@@ -3,24 +3,26 @@ set -euo pipefail
 
 # Build aka's managed docker images (tagged to match the defaults in
 # aka_kernel::config — override config.proxy.image / dns.image to retarget),
-# and publish them under two names — Docker Hub ($HUB_NAMESPACE) and the FBL
-# registry ($REGISTRY_NAMESPACE) — for linux/amd64 +
-# linux/arm64. Pushing requires `docker login`.
+# and publish them to the FBL registry ($REGISTRY_NAMESPACE) for
+# linux/amd64 + linux/arm64. Pushing requires `docker login` to every name
+# published.
 #
 # Every image gets two tags: $TAG (`latest`, what the compose files default to)
 # and the version of the `aka-cli` crate — so the image a
 # container runs from carries the same number `aka version` prints. Both come
 # from `bin/version.sh`, which moves every crate at once.
 #
-#   ./build.sh            # local tags + hub push
+#   ./build.sh            # local tags + registry push
 #   ./build.sh --no-push  # local tags only
 
-# Every build is published under both names, so the two never drift: the hub
-# repo is public (anonymous `aka pull`), the FBL registry is what
-# src/aka/docker-compose.yml and src/admin/docker-compose.yml name.
-HUB_NAMESPACE="${HUB_NAMESPACE:-dewey4iv}"
+# The FBL registry is the only default target: it's what src/aka/docker-compose.yml
+# and src/admin/docker-compose.yml name. Docker Hub is opt-in — set
+# HUB_NAMESPACE to co-push the public mirror (anonymous `aka pull`).
+# Releases reach the hub through CI instead (the hub-mirror crane step in
+# devops/woodpecker/workflows/), so local pushes rarely need HUB_NAMESPACE.
 REGISTRY_NAMESPACE="${REGISTRY_NAMESPACE:-registry.freshbrewlabs.cloud/aka}"
-NAMES=("$HUB_NAMESPACE" "$REGISTRY_NAMESPACE")
+NAMES=("$REGISTRY_NAMESPACE")
+if [ -n "${HUB_NAMESPACE:-}" ]; then NAMES+=("$HUB_NAMESPACE"); fi
 TAG="${TAG:-latest}"
 PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
 PUSH=1

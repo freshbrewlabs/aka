@@ -260,7 +260,9 @@ fn admin_dashboard_url(cfg: &AkaConfig) -> Option<String> {
     if !cfg.admin.enabled {
         return None;
     }
-    cfg.admin_hosts().first().map(|host| format!("http://{host}/"))
+    cfg.admin_hosts()
+        .first()
+        .map(|host| format!("http://{host}/"))
 }
 
 /// Overwrite the file contents without replacing the inode: the proxy

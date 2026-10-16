@@ -1,0 +1,50 @@
+# Tag-only: images push on `v*` releases and nowhere else. Same shape as
+# aka-proxy-build.yml; alpine + apk dnsmasq, trivially multi-arch.
+steps:
+  - name: version-tags
+    image: alpine
+    commands:
+      - cat src/aka/aka-cli/Cargo.toml | grep version | head -1 | cut -d'"' -f 2 | tr -d '\n' > .tags
+      - echo -n ",latest" >> .tags
+
+  - name: build
+    image: woodpeckerci/plugin-docker-buildx:6
+    privileged: true                        # see aka-proxy-build.yml
+    settings:
+      registry: registry.freshbrewlabs.cloud
+      repo: registry.freshbrewlabs.cloud/aka/aka-dns
+      dockerfile: devops/docker/aka-dns/Dockerfile
+      context: devops/docker/aka-dns
+      platforms: linux/amd64,linux/arm64
+      pull_image: true
+      username:
+        from_secret: docker_username
+      password:
+        from_secret: docker_password
+
+  # Mirror the pushed index to the public Docker Hub mirror (see
+  # aka-proxy-build.yml for the why and the release-docs note).
+  - name: hub-mirror
+    image: alpine:3.22
+    environment:
+      HARBOR_ROBOT:
+        from_secret: docker_username
+      HARBOR_TOKEN:
+        from_secret: docker_password
+      HUB_USERNAME:
+        from_secret: hub_username
+      HUB_PASSWORD:
+        from_secret: hub_password
+    commands:
+      - apk add --no-cache curl
+      - curl -fsSL https://github.com/google/go-containerregistry/releases/download/v0.22.1/go-containerregistry_Linux_x86_64.tar.gz -o /tmp/crane.tgz && tar xzf /tmp/crane.tgz -C /tmp crane && mv /tmp/crane /usr/local/bin/crane
+      - crane auth login registry.freshbrewlabs.cloud -u "$${HARBOR_ROBOT}" -p "$${HARBOR_TOKEN}"
+      - crane auth login docker.io -u "$${HUB_USERNAME}" -p "$${HUB_PASSWORD}"
+      - for tag in $$(tr , ' ' < .tags); do crane copy registry.freshbrewlabs.cloud/aka/aka-dns:$${tag} dewey4iv/aka-dns:$${tag}; done
+
+depends_on:
+  - after-specs
+
+when:
+  - event: tag
+    ref: refs/tags/v*

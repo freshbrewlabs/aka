@@ -1,0 +1,33 @@
+# Aggregator: the build workflows depend on this, so it must run whenever they
+# do. (Woodpecker 3.19 rejects step-less workflows, hence the notification step
+# doing double duty as the gate payload; `optional: true` is required because
+# depended-on workflows cannot be conditionally skipped.)
+steps:
+  - name: tests-completed
+    image: plugins/slack
+    settings:
+      webhook:
+        from_secret: slack_webhook
+      link_names: true
+      template: >
+        {{#success build.status}}
+          tests:`${CI_COMMIT_REF}` have passed.
+          took: {{since build.started}}
+          {{build.link}}
+        {{else}}
+          tests:`${CI_COMMIT_REF}` have failed.
+          {{build.link}}
+        {{/success}}
+
+depends_on:
+  - name: lint-check
+    optional: true
+  - name: unit-specs
+    optional: true
+
+when:
+  - event: tag
+    ref: refs/tags/v*
+  - event: pull_request
+  - event: push
+    branch: main

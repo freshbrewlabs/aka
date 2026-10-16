@@ -1,0 +1,58 @@
+# Tag-only. Rust + trunk/wasm compile, deliberately amd64-only — matching
+# src/admin/build.sh, which never cross-builds this image; arm64 machines
+# rebuild locally. Pinned to an amd64 node so the compile never lands on a Pi.
+steps:
+  - name: version-tags
+    image: alpine
+    commands:
+      - cat src/admin/admin-api/Cargo.toml | grep version | head -1 | cut -d'"' -f 2 | tr -d '\n' > .tags
+      - echo -n ",latest" >> .tags
+
+  - name: build
+    image: woodpeckerci/plugin-docker-buildx:6
+    privileged: true                        # see aka-proxy-build.yml
+    settings:
+      registry: registry.freshbrewlabs.cloud
+      repo: registry.freshbrewlabs.cloud/aka/aka-admin
+      pull_image: true
+      dockerfile: devops/docker/aka-admin/Dockerfile   # context = repo root:
+      context: .                                       # admin-api compiles aka's crates
+      platforms: linux/amd64
+      build_args:
+        - RUST_DEV_IMAGE_VERSION=v1.99.1    # keep in lockstep with the Dockerfile
+        - DEBIAN_SLIM_BASE_IMAGE_VERSION=trixie-slim   # ARG defaults + stylance
+      username:
+        from_secret: docker_username
+      password:
+        from_secret: docker_password
+    backend_options:
+      kubernetes:
+        nodeSelector:
+          kubernetes.io/arch: amd64         # Pi nodes are arm64 capacity
+
+  # Mirror the pushed image to the public Docker Hub mirror (see
+  # aka-proxy-build.yml): same digest, single amd64 arch.
+  - name: hub-mirror
+    image: alpine:3.22
+    environment:
+      HARBOR_ROBOT:
+        from_secret: docker_username
+      HARBOR_TOKEN:
+        from_secret: docker_password
+      HUB_USERNAME:
+        from_secret: hub_username
+      HUB_PASSWORD:
+        from_secret: hub_password
+    commands:
+      - apk add --no-cache curl
+      - curl -fsSL https://github.com/google/go-containerregistry/releases/download/v0.22.1/go-containerregistry_Linux_x86_64.tar.gz -o /tmp/crane.tgz && tar xzf /tmp/crane.tgz -C /tmp crane && mv /tmp/crane /usr/local/bin/crane
+      - crane auth login registry.freshbrewlabs.cloud -u "$${HARBOR_ROBOT}" -p "$${HARBOR_TOKEN}"
+      - crane auth login docker.io -u "$${HUB_USERNAME}" -p "$${HUB_PASSWORD}"
+      - for tag in $$(tr , ' ' < .tags); do crane copy registry.freshbrewlabs.cloud/aka/aka-admin:$${tag} dewey4iv/aka-admin:$${tag}; done
+
+depends_on:
+  - after-specs
+
+when:
+  - event: tag
+    ref: refs/tags/v*

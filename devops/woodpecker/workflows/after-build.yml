@@ -1,0 +1,28 @@
+# Terminal marker for tag builds — image push IS the end state for this CI.
+# Deploys stay manual (`aka up` / docker compose); no workflow here must ever
+# touch a cluster (deployment tooling must never appear in workflows/).
+steps:
+  - name: builds-completed
+    image: plugins/slack
+    settings:
+      webhook:
+        from_secret: slack_webhook
+      link_names: true
+      template: >
+        {{#success build.status}}
+          builds:`${CI_COMMIT_REF}` have passed.
+          took: {{since build.started}}
+          {{build.link}}
+        {{else}}
+          builds:`${CI_COMMIT_REF}` have failed.
+          {{build.link}}
+        {{/success}}
+
+depends_on:
+  - aka-proxy-build
+  - aka-dns-build
+  - aka-admin-build
+
+when:
+  - event: tag
+    ref: refs/tags/v*

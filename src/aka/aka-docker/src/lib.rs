@@ -503,7 +503,15 @@ impl AkaDocker {
     pub async fn tag(&self, src: &str, dst: &str) -> Result<(), BoxedError> {
         let (repo, tag) = split_image(dst);
         self.docker
-            .tag_image(src, Some(TagImageOptionsBuilder::default().repo(&repo).tag(&tag).build()))
+            .tag_image(
+                src,
+                Some(
+                    TagImageOptionsBuilder::default()
+                        .repo(&repo)
+                        .tag(&tag)
+                        .build(),
+                ),
+            )
             .await?;
         Ok(())
     }

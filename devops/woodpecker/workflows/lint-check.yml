@@ -1,0 +1,22 @@
+# No rustfmt.toml in this repo, so stable `cargo fmt --check` is the bar
+# (rolodex needs nightly for its unstable_features config; aka doesn't have one).
+steps:
+  - name: lint-fmt
+    image: rust:1.99                        # tracks the rust-dev:v1.99.1 pin
+                                            # every Dockerfile here uses; bump in lockstep
+    commands:
+      - cargo fmt --check
+
+  - name: lint-clippy
+    image: rust:1.99
+    commands:
+      - rustup component add clippy
+      - cargo clippy --no-deps --all-targets -- -D warnings
+
+when:
+  - event: tag
+    ref: refs/tags/v*
+  - event: pull_request
+    path: 'src/**/{*.rs,Cargo.toml,Cargo.lock}'
+  - event: push
+    branch: main
