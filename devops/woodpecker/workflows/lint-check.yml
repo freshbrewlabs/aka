@@ -5,6 +5,7 @@ steps:
     image: rust:1.99                        # tracks the rust-dev:v1.99.1 pin
                                             # every Dockerfile here uses; bump in lockstep
     commands:
+      - rustup component add rustfmt
       - cargo fmt --check
 
   - name: lint-clippy
