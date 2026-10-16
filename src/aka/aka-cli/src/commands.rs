@@ -569,7 +569,11 @@ pub fn cert_gen(
         .map_err(|_| "HOME is not set")?;
     let alg = if rsa { KeyAlg::Rsa } else { KeyAlg::Ecdsa };
     let exec = trust::Process;
-    let os = if cfg!(target_os = "macos") { "macos" } else { "linux" };
+    let os = if cfg!(target_os = "macos") {
+        "macos"
+    } else {
+        "linux"
+    };
     let stores = trust::detect(&exec, os);
     let ca_dir = paths.ca_dir();
 
@@ -739,7 +743,11 @@ fn clean_certs(
     }
     println!(
         "removed {removed} aka-issued cert pair(s) from {}",
-        if cfg.proxy.ssl_certs_dir.is_empty() { "(ssl_certs_dir unset)" } else { &cfg.proxy.ssl_certs_dir }
+        if cfg.proxy.ssl_certs_dir.is_empty() {
+            "(ssl_certs_dir unset)"
+        } else {
+            &cfg.proxy.ssl_certs_dir
+        }
     );
     if !kept.is_empty() {
         println!("kept, not issued by the aka CA: {}", kept.join(", "));

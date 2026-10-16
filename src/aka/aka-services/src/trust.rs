@@ -75,9 +75,8 @@ impl Exec for Process {
     }
 
     fn which(&self, program: &str) -> bool {
-        std::env::var_os("PATH").is_some_and(|path| {
-            std::env::split_paths(&path).any(|dir| dir.join(program).is_file())
-        })
+        std::env::var_os("PATH")
+            .is_some_and(|path| std::env::split_paths(&path).any(|dir| dir.join(program).is_file()))
     }
 
     fn sudo(&self, args: &[&str], stdin: Option<&[u8]>) -> Result<(), BoxedError> {
@@ -177,7 +176,11 @@ pub fn probe(exec: &dyn Exec, home: &Path, store: Store) -> Result<Trust, BoxedE
                         .next_back()
                         .is_some_and(|flags| flags.starts_with('C'))
             });
-            Ok(if trusted { Trust::Trusted } else { Trust::Present })
+            Ok(if trusted {
+                Trust::Trusted
+            } else {
+                Trust::Present
+            })
         }
         Store::DebianStore | Store::FedoraStore => Ok(if Path::new(anchor(store)).is_file() {
             // A present anchor: assume it went through the updater;
@@ -191,7 +194,12 @@ pub fn probe(exec: &dyn Exec, home: &Path, store: Store) -> Result<Trust, BoxedE
 
 /// Register the CA in one store; no-op when already trusted (the system
 /// store re-confirms by re-running its updater).
-pub fn register(exec: &dyn Exec, home: &Path, store: Store, ca_pem: &Path) -> Result<(), BoxedError> {
+pub fn register(
+    exec: &dyn Exec,
+    home: &Path,
+    store: Store,
+    ca_pem: &Path,
+) -> Result<(), BoxedError> {
     if probe(exec, home, store)? == Trust::Trusted && !uses_updater(store) {
         return Ok(());
     }
@@ -200,7 +208,8 @@ pub fn register(exec: &dyn Exec, home: &Path, store: Store, ca_pem: &Path) -> Re
     match store {
         Store::LoginKeychain => {
             let keychain = login_keychain(home).display().to_string();
-            let (ok, out) = exec.capture("security", &["add-trusted-cert", "-k", &keychain, &ca])?;
+            let (ok, out) =
+                exec.capture("security", &["add-trusted-cert", "-k", &keychain, &ca])?;
             if !ok {
                 return Err(format!("security add-trusted-cert failed: {}", out.trim()).into());
             }
@@ -219,7 +228,17 @@ pub fn register(exec: &dyn Exec, home: &Path, store: Store, ca_pem: &Path) -> Re
             }
             let (ok, out) = exec.capture(
                 "certutil",
-                &["-A", "-d", &db, "-n", CA_COMMON_NAME, "-t", "C,,", "-i", &ca],
+                &[
+                    "-A",
+                    "-d",
+                    &db,
+                    "-n",
+                    CA_COMMON_NAME,
+                    "-t",
+                    "C,,",
+                    "-i",
+                    &ca,
+                ],
             )?;
             if !ok {
                 return Err(format!("certutil -A failed: {}", out.trim()).into());
@@ -410,8 +429,7 @@ mod tests {
 
     impl FakeHome {
         fn new(tag: &str, has_nssdb: bool) -> Self {
-            let path =
-                std::env::temp_dir().join(format!("aka-trust-{tag}-{}", std::process::id()));
+            let path = std::env::temp_dir().join(format!("aka-trust-{tag}-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&path);
             if has_nssdb {
                 std::fs::create_dir_all(path.join(".pki/nssdb")).unwrap();
@@ -488,10 +506,15 @@ mod tests {
             "Nickname                                       Trust Flags Final Issuer\n\
              aka dev CA                                     CT,,\n",
         )]);
-        assert_eq!(probe(&trusted, &home.path, Store::Nss).unwrap(), Trust::Trusted);
+        assert_eq!(
+            probe(&trusted, &home.path, Store::Nss).unwrap(),
+            Trust::Trusted
+        );
 
-        let untrusted = Fake::new()
-            .responding(vec![(true, "aka dev CA                                     u,,\n")]);
+        let untrusted = Fake::new().responding(vec![(
+            true,
+            "aka dev CA                                     u,,\n",
+        )]);
         assert_eq!(
             probe(&untrusted, &home.path, Store::Nss).unwrap(),
             Trust::Present
@@ -503,13 +526,16 @@ mod tests {
         let home = FakeHome::new("nodb", false);
         let exec = Fake::new();
         assert_eq!(probe(&exec, &home.path, Store::Nss).unwrap(), Trust::Absent);
-        assert!(exec.log().is_empty(), "the dir gate short-circuits certutil");
+        assert!(
+            exec.log().is_empty(),
+            "the dir gate short-circuits certutil"
+        );
     }
 
     #[test]
     fn imported_without_trust_settings_is_not_trusted() {
-        let unrelated = Fake::new()
-            .responding(vec![(true, "Cert 1: cert \"other cert\" (0x01)\n")]);
+        let unrelated =
+            Fake::new().responding(vec![(true, "Cert 1: cert \"other cert\" (0x01)\n")]);
         assert_eq!(
             probe(&unrelated, Path::new("/home/dev"), Store::LoginKeychain).unwrap(),
             Trust::Absent,
@@ -535,7 +561,10 @@ mod tests {
 
         let log = exec.log();
         assert_eq!(log.len(), 2, "{log:?}");
-        assert!(log[0].starts_with("certutil -N --empty-password"), "{log:?}");
+        assert!(
+            log[0].starts_with("certutil -N --empty-password"),
+            "{log:?}"
+        );
         assert!(
             log[1].contains("-A")
                 && log[1].contains("-t C,,")
@@ -552,8 +581,8 @@ mod tests {
         let exec = Fake::new().responding(vec![
             (true, "aka dev CA                                     u,,\n"), // probe: Present
             (true, "aka dev CA                                     u,,\n"), // re-probe inside the removal
-            (true, ""),           // -D
-            (true, ""),           // -A
+            (true, ""),                                                     // -D
+            (true, ""),                                                     // -A
         ]);
         register(&exec, &home.path, Store::Nss, &ca).unwrap();
 
@@ -626,8 +655,12 @@ mod tests {
             (true, "aka dev CA"),   // deregister's internal probe
             (false, "needs admin"), // delete-certificate refused
         ]);
-        let err = unregister_all(&exec, Path::new("/home/dev"), &[Store::LoginKeychain, Store::Nss])
-            .unwrap_err();
+        let err = unregister_all(
+            &exec,
+            Path::new("/home/dev"),
+            &[Store::LoginKeychain, Store::Nss],
+        )
+        .unwrap_err();
         assert!(err.to_string().contains("delete-certificate"), "{err}");
         assert!(
             !exec.log().iter().any(|l| l.starts_with("certutil")),
@@ -652,8 +685,7 @@ mod tests {
 
         // Keychain probes absent; NSS dir gate short-circuits.
         let exec = Fake::new().responding(vec![(true, "no trust settings here")]);
-        let lines =
-            unregister_all(&exec, &home.path, &[Store::LoginKeychain, Store::Nss]).unwrap();
+        let lines = unregister_all(&exec, &home.path, &[Store::LoginKeychain, Store::Nss]).unwrap();
         assert!(lines.is_empty(), "absent is a quiet success");
     }
 
@@ -661,8 +693,8 @@ mod tests {
     fn status_lines_flag_gaps_and_only_probe() {
         let home = FakeHome::new("status", true);
         let exec = Fake::new().responding(vec![
-            (true, "aka dev CA           CT,,"),   // nss: trusted
-            (true, "some other cert only"),        // mac: absent -> gap
+            (true, "aka dev CA           CT,,"), // nss: trusted
+            (true, "some other cert only"),      // mac: absent -> gap
         ]);
         let (lines, gap) = status_lines(&exec, &home.path, &[Store::Nss, Store::LoginKeychain]);
         assert!(gap, "one gap is enough to suggest --trust");
@@ -672,7 +704,8 @@ mod tests {
         assert!(
             exec.log()
                 .iter()
-                .all(|l| l.starts_with("certutil -L") || l.starts_with("security dump-trust-settings")),
+                .all(|l| l.starts_with("certutil -L")
+                    || l.starts_with("security dump-trust-settings")),
             "status only probes: {:?}",
             exec.log()
         );
@@ -680,8 +713,13 @@ mod tests {
 
     #[test]
     fn empty_detection_prints_manual_commands() {
-        let lines = register_all(&Fake::new(), Path::new("/home/dev"), &[], Path::new("/tmp/ca.crt"))
-            .unwrap();
+        let lines = register_all(
+            &Fake::new(),
+            Path::new("/home/dev"),
+            &[],
+            Path::new("/tmp/ca.crt"),
+        )
+        .unwrap();
         assert_eq!(lines.len(), 2);
         assert!(lines[0].contains("manual: certutil"));
         assert!(lines[1].contains("sudo tee"));

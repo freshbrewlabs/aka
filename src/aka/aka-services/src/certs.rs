@@ -171,7 +171,10 @@ pub fn validate_host(host: &str) -> Result<(), BoxedError> {
         if label.starts_with('-') || label.ends_with('-') {
             return Err(bad("label may not start or end with '-'").into());
         }
-        if !label.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') {
+        if !label
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        {
             return Err(bad("label characters must be alphanumeric or '-'").into());
         }
     }
@@ -217,9 +220,7 @@ fn chain_verifies(ca_pem: &str, cert_pem: &str) -> Result<bool, BoxedError> {
     let (leaf_tbs, _) = tbs_tlv(&leaf_der).ok_or("malformed leaf certificate")?;
     let (_, ca_pubkey) = spki_tlv(&ca_der).ok_or("malformed CA certificate")?;
 
-    use ring::signature::{
-        ECDSA_P256_SHA256_ASN1, RSA_PKCS1_2048_8192_SHA256, UnparsedPublicKey,
-    };
+    use ring::signature::{ECDSA_P256_SHA256_ASN1, RSA_PKCS1_2048_8192_SHA256, UnparsedPublicKey};
     let sig_alg = leaf.signature_algorithm.algorithm.to_string();
     let sig: &[u8] = &leaf.signature_value.data;
     let verified = if sig_alg == SIG_ECDSA_SHA256 {
@@ -243,11 +244,8 @@ fn now() -> time::OffsetDateTime {
     n - time::Duration::nanoseconds(i64::from(n.nanosecond()))
 }
 
-fn ca_params(
-    not_before: time::OffsetDateTime,
-    days: i64,
-) -> rcgen::CertificateParams {
-    use rcgen::{BasicConstraints, DnType, DistinguishedName, IsCa, KeyUsagePurpose};
+fn ca_params(not_before: time::OffsetDateTime, days: i64) -> rcgen::CertificateParams {
+    use rcgen::{BasicConstraints, DistinguishedName, DnType, IsCa, KeyUsagePurpose};
     let mut dn = DistinguishedName::new();
     dn.push(DnType::CommonName, CA_COMMON_NAME);
     let mut params = rcgen::CertificateParams::default();
@@ -308,12 +306,9 @@ fn pem_der(cert_pem: &str) -> Result<Vec<u8>, BoxedError> {
 }
 
 fn cn_of(name: &x509_parser::x509::X509Name<'_>) -> Option<String> {
-    name.iter_common_name().next().map(|atv| {
-        atv.attr_value()
-            .as_str()
-            .unwrap_or("<binary>")
-            .to_owned()
-    })
+    name.iter_common_name()
+        .next()
+        .map(|atv| atv.attr_value().as_str().unwrap_or("<binary>").to_owned())
 }
 
 /// One DER tag-length-value entry: tag, total entry length, value, rest.
@@ -446,8 +441,8 @@ mod tests {
 
     impl TempDir {
         fn new(tag: &str) -> Self {
-            let dir = std::env::temp_dir()
-                .join(format!("aka-certgen-{tag}-{}", std::process::id()));
+            let dir =
+                std::env::temp_dir().join(format!("aka-certgen-{tag}-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
             std::fs::create_dir_all(&dir).unwrap();
             Self(dir)
@@ -548,7 +543,11 @@ mod tests {
             "SAN DNSName=api.docker"
         );
         assert!(
-            leaf.extended_key_usage().unwrap().unwrap().value.server_auth,
+            leaf.extended_key_usage()
+                .unwrap()
+                .unwrap()
+                .value
+                .server_auth,
             "EKU serverAuth"
         );
         let v = leaf.validity();
@@ -603,8 +602,13 @@ mod tests {
         assert!(!loaded.created);
         assert_eq!(loaded.fingerprint, first.fingerprint);
 
-        let (crt, _) =
-            generate_cert(&loaded, "rsa.docker", KeyAlg::Rsa, &tmp.path().join("certs")).unwrap();
+        let (crt, _) = generate_cert(
+            &loaded,
+            "rsa.docker",
+            KeyAlg::Rsa,
+            &tmp.path().join("certs"),
+        )
+        .unwrap();
         let der = pem_der(&read_pem(&crt)).unwrap();
         let (_, leaf) = X509Certificate::from_der(&der).unwrap();
         assert_eq!(
@@ -620,11 +624,18 @@ mod tests {
         let honest = ensure_ca(&tmp.path().join("ca1"), KeyAlg::Ecdsa).unwrap();
         // A different CA, the same CN, signing its own leaf.
         let rogue = ensure_ca(&tmp.path().join("ca2"), KeyAlg::Ecdsa).unwrap();
-        let (rogue_leaf, _) =
-            generate_cert(&rogue, "api.docker", KeyAlg::Ecdsa, &tmp.path().join("certs")).unwrap();
+        let (rogue_leaf, _) = generate_cert(
+            &rogue,
+            "api.docker",
+            KeyAlg::Ecdsa,
+            &tmp.path().join("certs"),
+        )
+        .unwrap();
 
         assert_eq!(
-            issuer_common_name(&read_pem(&rogue_leaf)).unwrap().as_deref(),
+            issuer_common_name(&read_pem(&rogue_leaf))
+                .unwrap()
+                .as_deref(),
             Some(CA_COMMON_NAME),
             "the name alone matches — which is why it proves nothing"
         );

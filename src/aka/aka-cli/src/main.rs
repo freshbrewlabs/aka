@@ -180,9 +180,14 @@ async fn main() -> Result<(), aka_kernel::BoxedError> {
         Commands::Pull => commands::pull(&provider).await,
         Commands::Routes { json } => commands::routes(&provider, json),
         Commands::ConfigFile { force, upgrade } => commands::config_file(&provider, force, upgrade),
-        Commands::CertGen { host, rsa, ca, trust, untrust, clean } => {
-            commands::cert_gen(&provider, host.as_deref(), ca, trust, untrust, clean, rsa)
-        }
+        Commands::CertGen {
+            host,
+            rsa,
+            ca,
+            trust,
+            untrust,
+            clean,
+        } => commands::cert_gen(&provider, host.as_deref(), ca, trust, untrust, clean, rsa),
         Commands::InstallSudoRule => commands::install_sudo_rule(),
         Commands::Update { git_ref } => commands::update(&provider, git_ref.as_deref()),
         Commands::Version => commands::version(),
