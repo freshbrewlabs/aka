@@ -1,6 +1,6 @@
-ARG TARGETVERSION=latest
+ARG TARGETVERSION=v1.99.1
 
-FROM registry.vizerapp.cloud/pub/rust-dev:$TARGETVERSION
+FROM registry.freshbrewlabs.cloud/base/rust-dev:$TARGETVERSION
 
 ARG TARGETPLATFORM
 

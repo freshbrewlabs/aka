@@ -6,13 +6,13 @@ services:
       args:
         RUST_DEV_IMAGE_VERSION: $RUST_DEV_IMAGE_VERSION
         DEBIAN_SLIM_BASE_IMAGE_VERSION: $DEBIAN_SLIM_BASE_IMAGE_VERSION
-    image: ${HUB_NAMESPACE:-dewey4iv}/aka-admin:${TAG:-latest}
+    image: registry.freshbrewlabs.cloud/aka/aka-admin:${TAG:-latest}
     platform: $DOCKER_PLATFORM
     profiles: ["images"]
 
   # The dashboard: UI + API on one port, one origin.
   admin:
-    image: ${HUB_NAMESPACE:-dewey4iv}/aka-admin:${TAG:-latest}
+    image: registry.freshbrewlabs.cloud/aka/aka-admin:${TAG:-latest}
     platform: $DOCKER_PLATFORM
     restart: unless-stopped
     environment:
@@ -38,7 +38,7 @@ services:
   admin-api:
     working_dir: /home/rust/src/admin
     command: /bin/bash -c 'watchexec -c -e rs -r cargo run --bin admin-api'
-    image: registry.vizerapp.cloud/lib/rust-dev:$RUST_DEV_IMAGE_VERSION
+    image: registry.freshbrewlabs.cloud/base/rust-dev:$RUST_DEV_IMAGE_VERSION
     platform: $DOCKER_PLATFORM
     stdin_open: true
     tty: true

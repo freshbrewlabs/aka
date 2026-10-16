@@ -215,6 +215,10 @@ small { color: #66748a }
 </body>
 </html>"#;
 
+/// The minimum width of the SNI map's key column, chosen so the shipped
+/// short-host config keeps the bytes it has always had.
+const SNI_COLUMN: usize = 23;
+
 pub fn render_stream(table: &RouteTable, proxy: &ProxyConfig) -> String {
     let mut out = String::new();
     out.push_str("# managed by aka (aka _proxyd); do not edit\n\n");
@@ -228,15 +232,45 @@ pub fn render_stream(table: &RouteTable, proxy: &ProxyConfig) -> String {
     let sni_enabled = proxy.tls_enabled && (!tls_routes.is_empty() || !table.terminated.is_empty());
 
     if sni_enabled {
+        // A map entry is `key value;` on one line. A fixed `{:<23}` column
+        // collapses to NO padding for a host longer than 23 characters, and
+        // `api.something.long.example.comaka_local8443;` is not two tokens: one
+        // such name fails `angie -t` ("invalid number of the map parameters") and
+        // keeps the whole stream config at its previous version — every TLS host
+        // stops routing. The column therefore widens to whatever it must hold,
+        // plus one space: a key exactly as wide as the column still touches its
+        // value, which is the same single token angie rejects.
+        let widest = table
+            .terminated
+            .iter()
+            .map(|route| route.host.len())
+            .chain(
+                tls_routes
+                    .iter()
+                    .flat_map(|route| route.hosts.iter().map(|host| host.len())),
+            )
+            .max()
+            .unwrap_or(0);
+        let column = SNI_COLUMN.max(widest + 1);
+
         out.push_str(
             "map $ssl_preread_server_name $aka_sni {\n    default            aka_reject;\n",
         );
         for route in &table.terminated {
-            out.push_str(&format!("    {:<23}aka_local8443;\n", route.host));
+            out.push_str(&format!(
+                "    {:<w$}aka_local8443;\n",
+                route.host,
+                w = column
+            ));
         }
         for (index, route) in tls_routes.iter().enumerate() {
             for host in &route.hosts {
-                out.push_str(&format!("    {:<23}{};\n", host, upstream_name("t", index)));
+                out.push_str(&format!(
+                    "    {:<w$}{};\n",
+                    host,
+                    upstream_name("t", index),
+                    w = column
+                ));
             }
         }
         out.push_str("}\n\n");
@@ -485,6 +519,39 @@ mod tests {
         assert!(http.contains("listen 8443 ssl;"));
         assert!(http.contains(&format!("{}/site.docker.crt", CONTAINER_CERTS_DIR)));
         assert!(http.contains("proxy_pass http://aka_ht0;"));
+    }
+
+    #[test]
+    fn a_long_sni_host_still_separates_its_key_from_its_upstream() {
+        // Real domains are longer than the 23-char column (`api.oxidauth.
+        // oxidauthexample.fbl.dev` is 36), and a key that runs into its value is
+        // one token: angie rejects the map and NO tls host routes any more.
+        let long = "api.oxidauth.oxidauthexample.fbl.dev";
+        let table = RouteTable {
+            terminated: vec![TerminatedRoute {
+                host: long.into(),
+                cert: format!("{long}.crt"),
+                key: format!("{long}.key"),
+                container: "api".into(),
+                proto: RouteProto::Http,
+                upstream: Upstream {
+                    servers: vec!["172.25.0.4:80".into()],
+                },
+            }],
+            ..Default::default()
+        };
+
+        let out = rendered_stream(&table);
+        let line = out
+            .lines()
+            .find(|line| line.contains(long))
+            .expect("the long host gets a map entry");
+
+        assert!(
+            line.contains(&format!("{long} ")) && line.ends_with("aka_local8443;"),
+            "the key must be padded away from its upstream: {line:?}"
+        );
+        assert!(!out.contains(&format!("{long}aka_local8443;")), "{out}");
     }
 
     #[test]

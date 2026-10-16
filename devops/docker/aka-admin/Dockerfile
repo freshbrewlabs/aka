@@ -13,10 +13,10 @@
 # (config on top of a published base, shipped multi-arch), this is a Rust and
 # wasm compile, which is not cross-targeted here.
 
-ARG RUST_DEV_IMAGE_VERSION=v1.98.0
+ARG RUST_DEV_IMAGE_VERSION=v1.99.1
 ARG DEBIAN_SLIM_BASE_IMAGE_VERSION=trixie-slim
 
-FROM registry.vizerapp.cloud/pub/rust-dev:${RUST_DEV_IMAGE_VERSION} AS build
+FROM registry.freshbrewlabs.cloud/base/rust-dev:${RUST_DEV_IMAGE_VERSION} AS build
 
 # The same trunk + wasm toolchain pair as devops/docker/stylance (the dev
 # container for admin-web), so `trunk build --release` here and `trunk serve`
