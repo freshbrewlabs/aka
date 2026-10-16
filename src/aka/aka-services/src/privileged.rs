@@ -25,6 +25,7 @@ pub fn sudoers_text(user: &str, exe: &Path) -> String {
 }
 
 /// Test hook so the root-side writes can be exercised without root.
+#[cfg(target_os = "macos")]
 fn resolver_dir() -> PathBuf {
     std::env::var_os("AKA_RESOLVER_DIR")
         .map_or_else(|| PathBuf::from("/etc/resolver"), PathBuf::from)
@@ -316,10 +317,15 @@ mod tests {
     fn privileged_write_writes_only_validated_targets() {
         let dir = std::env::temp_dir().join(format!("aka-resolver-{}", std::process::id()));
         std::fs::remove_dir_all(&dir).ok();
-        // SAFETY: this is the only test touching AKA_RESOLVER_DIR
-        unsafe { std::env::set_var("AKA_RESOLVER_DIR", &dir) };
-        let written = write(&req()).unwrap();
+        std::fs::create_dir_all(&dir).unwrap();
+        let resolv = dir.join("resolv.conf");
+        // SAFETY: these are the only tests touching the resolver env hooks
+        unsafe {
+            std::env::set_var("AKA_RESOLVER_DIR", &dir);
+            std::env::set_var("AKA_RESOLV_CONF", &resolv);
+        }
         if cfg!(target_os = "macos") {
+            let written = write(&req()).unwrap();
             assert_eq!(written.len(), 2);
             let docker = std::fs::read_to_string(dir.join("docker")).unwrap();
             assert!(docker.contains("nameserver 127.0.0.1") && docker.contains("port 53"));
@@ -331,8 +337,25 @@ mod tests {
                 std::fs::read_to_string(dir.join("test")).unwrap(),
                 "do not touch"
             );
+        } else {
+            std::fs::write(&resolv, "# foreign\nnameserver 1.1.1.1\n").unwrap();
+            let written = write(&req()).unwrap();
+            assert_eq!(written, vec![resolv.clone()]);
+            let contents = std::fs::read_to_string(&resolv).unwrap();
+            assert!(
+                contents.contains("nameserver 127.0.0.1")
+                    && contents.contains("nameserver 1.1.1.1")
+            );
+            // clean removes our chunk and leaves foreign lines
+            clean(&["docker".into(), "test".into()]).unwrap();
+            let contents = std::fs::read_to_string(&resolv).unwrap();
+            assert!(!contents.contains("nameserver 127.0.0.1"));
+            assert!(contents.contains("nameserver 1.1.1.1"));
         }
-        unsafe { std::env::remove_var("AKA_RESOLVER_DIR") };
+        unsafe {
+            std::env::remove_var("AKA_RESOLVER_DIR");
+            std::env::remove_var("AKA_RESOLV_CONF");
+        }
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
