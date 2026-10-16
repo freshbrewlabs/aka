@@ -3,14 +3,15 @@ set -euo pipefail
 
 # Build aka's dashboard image — the API plus the dashboard it serves, one
 # container — tagged the way src/admin/docker-compose.yml expects it, and
-# published to Docker Hub as $HUB_NAMESPACE/aka-admin.
+# published under two names — Docker Hub ($HUB_NAMESPACE) and the FBL registry
+# ($REGISTRY_NAMESPACE).
 #
 # Two tags, like aka's other images: $TAG (`latest`, what compose defaults to)
 # and the version of the `admin-api` crate, which is what the healthcheck and
 # the dashboard report — so a running container's tag and its advertised version
 # are read from the same Cargo.toml line. `bin/version.sh` moves them all.
 #
-#   ./build.sh            # local tags + hub push
+#   ./build.sh            # local tags + push to both names
 #   ./build.sh --no-push  # local tags only
 #
 # Local platform only, and the pushed tag therefore names one architecture:
@@ -23,7 +24,11 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 
+# Both names, like src/aka/build.sh: the hub repo is public, the FBL registry
+# is what src/admin/docker-compose.yml names.
 HUB_NAMESPACE="${HUB_NAMESPACE:-dewey4iv}"
+REGISTRY_NAMESPACE="${REGISTRY_NAMESPACE:-registry.freshbrewlabs.cloud/aka}"
+NAMES=("$HUB_NAMESPACE" "$REGISTRY_NAMESPACE")
 TAG="${TAG:-latest}"
 PUSH=1
 
@@ -39,16 +44,23 @@ for arg in "$@"; do
     esac
 done
 
+# Both names, two tags each.
+tag_args=()
+refs=()
+for ns in "${NAMES[@]}"; do
+    tag_args+=(-t "$ns/aka-admin:$TAG" -t "$ns/aka-admin:$VERSION")
+    refs+=("$ns/aka-admin:$TAG" "$ns/aka-admin:$VERSION")
+done
+
 # The context is the repo root (see the Dockerfile), not this directory.
-docker build -t "$HUB_NAMESPACE/aka-admin:$TAG" \
-    -t "$HUB_NAMESPACE/aka-admin:$VERSION" \
-    -f devops/docker/aka-admin/Dockerfile .
+docker build "${tag_args[@]}" -f devops/docker/aka-admin/Dockerfile .
 
 if [ "$PUSH" = 1 ]; then
     # A plain push of the local tags: single platform, so no buildx split.
-    docker push "$HUB_NAMESPACE/aka-admin:$TAG"
-    docker push "$HUB_NAMESPACE/aka-admin:$VERSION"
-    echo "pushed $HUB_NAMESPACE/aka-admin:$TAG + :$VERSION ($(docker image inspect "$HUB_NAMESPACE/aka-admin:$TAG" --format '{{.Os}}/{{.Architecture}}'))"
+    for ref in "${refs[@]}"; do
+        docker push "$ref"
+    done
+    echo "pushed ${refs[*]} ($(docker image inspect "$HUB_NAMESPACE/aka-admin:$TAG" --format '{{.Os}}/{{.Architecture}}'))"
 fi
 
-echo "tagged $HUB_NAMESPACE/aka-admin:$TAG + :$VERSION locally"
+echo "tagged ${refs[*]} locally"

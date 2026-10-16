@@ -35,6 +35,15 @@ That ref is what installs, so a dirty clone is not: finish an update with
 `aka pull` (images for the new version) and `aka restart`, which recreates any
 service still running an older build and respawns proxyd on the new binary.
 
+Every image is published under two names from one build: Docker Hub
+(`dewey4iv`, what aka's defaults name, so a fresh machine needs no registry
+login) and `registry.freshbrewlabs.cloud/aka` (what aka's own compose files
+name). Either name on an `image` line in `~/.aka.toml` pulls the same bytes. A
+pin naming an aka image under a repo aka does not publish to — the default an
+older aka wrote into the file, for instance — is retargeted on disk by the next
+aka command, with the change printed; a config aka did not generate is only
+reported, never edited.
+
 Already have a clone? `bin/install.sh` does the same steps in place.
 
 ## Quick start
@@ -260,9 +269,11 @@ nothing). See `src/admin/README.md`.
 ## Development
 
 ```bash
-bin/build.sh       # every src/**/build.sh, pushed to $HUB_NAMESPACE as :$TAG
-                   # (`latest`) and :<crate version> — aka-proxy + aka-dns
-                   # multi-arch, aka-admin (dashboard) for one arch
+bin/build.sh       # every src/**/build.sh, pushed to $HUB_NAMESPACE (dewey4iv,
+                   # on Docker Hub) and $REGISTRY_NAMESPACE
+                   # (registry.freshbrewlabs.cloud/aka) as :$TAG (`latest`) and
+                   # :<crate version> — aka-proxy + aka-dns multi-arch,
+                   # aka-admin (dashboard) for one arch
 bin/version.sh 0.2.0   # every crate to one version, so the version tag moves
                         # with it (no arguments: show; cargo-edit underneath)
 bin/unit_test.sh   # cargo test --workspace

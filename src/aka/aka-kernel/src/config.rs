@@ -1,6 +1,21 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
+/// The image repo aka's defaults pull from: aka's Docker Hub namespace, so a
+/// fresh machine needs no registry login to `aka pull`. Every build is also
+/// published under the FBL registry namespace (see `PUBLISHED_IMAGE_REPOS`),
+/// which is what the compose files in `src/` name; set `image` per service in
+/// `~/.aka.toml` to pull from there.
+pub const IMAGE_REPO: &str = "dewey4iv";
+
+/// Every repo that carries aka's managed images: `bin/build.sh` tags one build
+/// with both names, so either pulls the same bytes. A pin naming an aka image
+/// (`aka-dns`, `aka-proxy`, `aka-admin`) under any other repo cannot be
+/// fetched, which is what a future move of `IMAGE_REPO` would leave every
+/// existing `~/.aka.toml` in — `aka_services::config::retarget_image_pins`
+/// fixes those pins.
+pub const PUBLISHED_IMAGE_REPOS: &[&str] = &[IMAGE_REPO, "registry.freshbrewlabs.cloud/aka"];
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 #[derive(Default)]
@@ -60,7 +75,7 @@ impl Default for DnsConfig {
             enabled: true,
             domains: vec![DomainAddress::default()],
             container_name: "aka_dns".into(),
-            image: "dewey4iv/aka-dns:latest".into(),
+            image: format!("{IMAGE_REPO}/aka-dns:latest"),
             port: 53,
             bind_ip: "127.0.0.1".into(),
             kill_others: KillOthers::default(),
@@ -122,7 +137,7 @@ impl Default for ProxyConfig {
         Self {
             enabled: true,
             container_name: "aka_proxy".into(),
-            image: "dewey4iv/aka-proxy:latest".into(),
+            image: format!("{IMAGE_REPO}/aka-proxy:latest"),
             network: "aka".into(),
             http_port: 80,
             tls_enabled: true,
@@ -190,7 +205,7 @@ impl Default for AdminConfig {
         Self {
             enabled: true,
             container_name: "aka_admin".into(),
-            image: "dewey4iv/aka-admin:latest".into(),
+            image: format!("{IMAGE_REPO}/aka-admin:latest"),
             host_port: 3001,
             bind_ip: "127.0.0.1".into(),
             docker_socket: "/var/run/docker.sock".into(),

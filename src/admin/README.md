@@ -54,7 +54,7 @@ an origin:
 | `/dashboard`, `/routes` | `index.html` (client-side router) |
 | `/*_bg.wasm`, `/*.css` | trunk's hashed bundles |
 
-The image is built in two stages: `registry.vizerapp.cloud/pub/rust-dev` (the
+The image is built in two stages: `registry.freshbrewlabs.cloud/base/rust-dev` (the
 same dev image the compose services run) installs trunk + the wasm target,
 `cargo build --release -p admin-api` and `trunk build --release`, with registry
 and target cache mounts so a rebuild recompiles what changed;
@@ -62,8 +62,9 @@ and target cache mounts so a rebuild recompiles what changed;
 runtime with the binary and `/usr/share/aka-admin/web`.
 
 ```bash
-bash src/admin/build.sh                              # :latest + :<version>, pushed (--no-push: tags only)
-docker compose build --profile images aka-admin      # :latest, via compose, no push
+bash src/admin/build.sh                              # :latest + :<version>, tagged and pushed under
+                                                     # both names (--no-push: tags only)
+docker compose build --profile images aka-admin      # :latest under the registry name only, no push
 bin/build.sh                                         # every src/**/build.sh, pushed
 ```
 
@@ -160,7 +161,7 @@ into the bundle instead; the dev container sets it for you.
 | `ADMIN_PORT` | compose | Dashboard host port on loopback (default `3001`) |
 | `ADMIN_API_PORT` / `ADMIN_WEB_PORT` | compose `dev` | Hot-reload pair's loopback ports (defaults `3000` / `3002`) |
 | `DOCKER_SOCKET` | compose | Docker socket to mount (default `/var/run/docker.sock`) |
-| `HUB_NAMESPACE` / `TAG` | build, compose | Hub repo (`dewey4iv`) and the moving tag (`latest`); the version tag comes from `admin-api`'s Cargo.toml |
+| `HUB_NAMESPACE` / `REGISTRY_NAMESPACE` / `TAG` | build | Where the image is published: the Docker Hub repo (`dewey4iv`) and the FBL registry namespace (`registry.freshbrewlabs.cloud/aka`); every build is tagged `latest` (`TAG`) plus `admin-api`'s Cargo.toml version and pushed to both. compose pulls the registry name |
 | `RUST_DEV_IMAGE_VERSION`, `DEBIAN_SLIM_BASE_IMAGE_VERSION` | build | Builder and runtime bases (set in `.env`, see `example.env`) |
 | `ADMIN_API_URL` | web (compile-time) | API base URL, for when the API is not the page's origin |
 
