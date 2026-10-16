@@ -544,6 +544,212 @@ pub fn install_sudo_rule() -> Result<(), BoxedError> {
     aka_services::privileged::install_sudo_rule()
 }
 
+// ------------------------------------------------------------------ cert-gen
+
+/// Issue a self-signed host cert from aka's local CA (see
+/// docs/features/tls-cert-generation.md). Trust stores are entered only when
+/// a run just created the CA (or via `--trust`); a run that did not create
+/// the CA probes and reports, never prompts.
+pub fn cert_gen(
+    provider: &Provider,
+    host: Option<&str>,
+    want_ca: bool,
+    want_trust: bool,
+    want_untrust: bool,
+    clean: bool,
+    rsa: bool,
+) -> Result<(), BoxedError> {
+    use aka_services::certs::KeyAlg;
+    use aka_services::trust;
+
+    let cfg = provider.fetch_unchecked::<AkaConfig>();
+    let paths = provider.fetch_unchecked::<AkaPaths>();
+    let home = std::env::var("HOME")
+        .map(PathBuf::from)
+        .map_err(|_| "HOME is not set")?;
+    let alg = if rsa { KeyAlg::Rsa } else { KeyAlg::Ecdsa };
+    let exec = trust::Process;
+    let os = if cfg!(target_os = "macos") { "macos" } else { "linux" };
+    let stores = trust::detect(&exec, os);
+    let ca_dir = paths.ca_dir();
+
+    match (host, want_ca, want_trust, want_untrust, clean) {
+        (Some(host), false, false, false, false) => {
+            aka_services::certs::validate_host(host)?;
+            let ca = aka_services::certs::ensure_ca(&ca_dir, alg)?;
+            if ca.created {
+                println!("created CA {}", ca.cert_path.display());
+            }
+            if cfg.proxy.ssl_certs_dir.is_empty() {
+                return Err(
+                    "proxy.ssl_certs_dir is not set; add the host directory the proxy \
+                     mounts certs from, e.g.\n    ssl_certs_dir = \
+                     \"/Users/you/.aka/proxy.d/certs\""
+                        .into(),
+                );
+            }
+            let out = PathBuf::from(&cfg.proxy.ssl_certs_dir);
+            let (crt, key) = aka_services::certs::generate_cert(&ca, host, alg, &out)?;
+            println!(
+                "issued {host} (valid {} days)",
+                aka_services::certs::LEAF_VALIDITY_DAYS
+            );
+            println!("  cert {}", crt.display());
+            println!("  key  {}", key.display());
+            let pem = std::fs::read_to_string(&crt)?;
+            println!("  sha256 {}", aka_services::certs::fingerprint(&pem)?);
+
+            if ca.created && std::env::var("AKA_HOME").is_ok() {
+                // The dev loop relocates the CA dir; global stores must not
+                // pick up a throwaway CA.
+                println!("AKA_HOME set: skipping trust registration (run: aka cert-gen --trust)");
+            } else if ca.created {
+                // The only flow that can prompt; a declined prompt must not
+                // fail issuance — the files are already in place.
+                match trust::register_all(&exec, &home, &stores, &ca.cert_path) {
+                    Ok(lines) => {
+                        for line in lines {
+                            println!("{line}");
+                        }
+                    }
+                    Err(err) => {
+                        println!("trust failed: {err}");
+                        println!("the cert files are in place; retry `aka cert-gen --trust`");
+                    }
+                }
+            } else {
+                // Existing CA: per-store probe and report only.
+                let (lines, gap) = trust::status_lines(&exec, &home, &stores);
+                for line in lines {
+                    println!("{line}");
+                }
+                if stores.is_empty() {
+                    println!("no supported trust store found; manual options:");
+                    for line in trust::manual_commands(&ca.cert_path) {
+                        println!("  {line}");
+                    }
+                } else if gap {
+                    println!("run: aka cert-gen --trust");
+                }
+            }
+            Ok(())
+        }
+        (None, true, false, false, false) => {
+            let ca = aka_services::certs::ensure_ca(&ca_dir, alg)?;
+            if ca.created {
+                println!("created CA {}", ca.cert_path.display());
+            }
+            println!("CA     {}", ca.cert_path.display());
+            println!("key    {}", ca.key_path.display());
+            println!("sha256 {}", ca.fingerprint);
+            let (lines, gap) = trust::status_lines(&exec, &home, &stores);
+            for line in lines {
+                println!("{line}");
+            }
+            if stores.is_empty() {
+                println!("no supported trust store found; manual options:");
+                for line in trust::manual_commands(&ca.cert_path) {
+                    println!("  {line}");
+                }
+            } else if gap {
+                println!("run: aka cert-gen --trust");
+            }
+            Ok(())
+        }
+        (None, false, true, false, false) => {
+            let ca = aka_services::certs::ensure_ca(&ca_dir, alg)?;
+            if ca.created {
+                println!("created CA {}", ca.cert_path.display());
+            }
+            for line in trust::register_all(&exec, &home, &stores, &ca.cert_path)? {
+                println!("{line}");
+            }
+            Ok(())
+        }
+        (None, false, false, true, false) => {
+            for line in trust::unregister_all(&exec, &home, &stores)? {
+                println!("{line}");
+            }
+            println!(
+                "trust stores left; files under {} stay (remove with --clean)",
+                ca_dir.display()
+            );
+            Ok(())
+        }
+        (None, false, false, false, true) => clean_certs(&exec, &home, &stores, &cfg, &ca_dir),
+        (Some(_), ..) => {
+            Err("a host cannot be combined with --ca/--trust/--untrust/--clean".into())
+        }
+        _ => Err("expected exactly one of: <host>, --ca, --trust, --untrust, --clean".into()),
+    }
+}
+
+/// `--clean`: leave every trust store first (a declined prompt aborts before
+/// any file is touched), then delete the CA and only the cert pairs the CA
+/// actually signed — issuer CN *and* chain verification, so a user-provided
+/// cert that merely shares the CN survives.
+fn clean_certs(
+    exec: &dyn aka_services::trust::Exec,
+    home: &std::path::Path,
+    stores: &[aka_services::trust::Store],
+    cfg: &AkaConfig,
+    ca_dir: &std::path::Path,
+) -> Result<(), BoxedError> {
+    let cert_path = ca_dir.join("ca.crt");
+    let key_path = ca_dir.join("ca.key");
+    let ca_present = cert_path.is_file() || key_path.is_file();
+
+    if ca_present {
+        for line in aka_services::trust::unregister_all(exec, home, stores)? {
+            println!("{line}");
+        }
+    }
+
+    let ca_pem = if cert_path.is_file() {
+        Some(std::fs::read_to_string(&cert_path)?)
+    } else {
+        None
+    };
+
+    let mut removed = 0usize;
+    let mut kept = Vec::new();
+    for pair in aka_services::certs::find_cert_pairs(&cfg.proxy.ssl_certs_dir).values() {
+        let ours = match &ca_pem {
+            Some(pem) => {
+                aka_services::certs::is_aka_issued(pem, &std::fs::read_to_string(&pair.cert)?)?
+            }
+            None => false,
+        };
+        if ours {
+            std::fs::remove_file(&pair.cert)?;
+            std::fs::remove_file(&pair.key)?;
+            removed += 1;
+        } else {
+            kept.push(pair.host.clone());
+        }
+    }
+
+    if ca_present {
+        for path in [&cert_path, &key_path] {
+            if path.is_file() {
+                std::fs::remove_file(path)?;
+            }
+        }
+        println!("removed the CA from {}", ca_dir.display());
+    }
+    println!(
+        "removed {removed} aka-issued cert pair(s) from {}",
+        if cfg.proxy.ssl_certs_dir.is_empty() { "(ssl_certs_dir unset)" } else { &cfg.proxy.ssl_certs_dir }
+    );
+    if !kept.is_empty() {
+        println!("kept, not issued by the aka CA: {}", kept.join(", "));
+    }
+    if !ca_present && removed == 0 && kept.is_empty() {
+        println!("nothing to clean");
+    }
+    Ok(())
+}
+
 // ------------------------------------------------------------------ update
 
 /// The canonical install repo; `AKA_REPO` overrides it (same knob as install.sh).

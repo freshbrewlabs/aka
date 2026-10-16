@@ -13,6 +13,7 @@ pub mod privileged;
 pub mod proxyd;
 pub mod resolv;
 pub mod statefile;
+pub mod trust;
 
 pub use config::{load_config, load_or_default, write_default_config};
 pub use paths::AkaPaths;

@@ -153,7 +153,7 @@ pub fn clean(domains: &[String]) -> Result<(), BoxedError> {
 
 /// `sudo [-n] <args...>`, stdin optional; stdout/stderr inherited only on
 /// the interactive attempt so a password prompt can reach the terminal.
-fn run_sudo(args: &[&str], stdin: Option<&[u8]>) -> Result<(), BoxedError> {
+pub(crate) fn run_sudo(args: &[&str], stdin: Option<&[u8]>) -> Result<(), BoxedError> {
     for non_interactive in [true, false] {
         let mut cmd = Command::new("sudo");
         if non_interactive {

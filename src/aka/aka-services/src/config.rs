@@ -60,7 +60,7 @@ network = "aka"              # docker network the proxy lives on
 http_port = 80               # host port published for http vhosts
 tls_enabled = true           # publish tls_port and enable SNI routing
 tls_port = 443
-ssl_certs_dir = ""           # host dir with <host>.crt/.key pairs to terminate TLS
+ssl_certs_dir = ""           # absolute host dir with <host>.crt/.key pairs; aka cert-gen writes here (CA: ~/.aka/ca/)
 bind_ip = "127.0.0.1"
 restart = "unless-stopped"
 max_body_size = "0"          # max request body; 0 = no limit, "" = angie's own default (1 MiB)
@@ -135,6 +135,15 @@ fn validate(cfg: &AkaConfig) -> Result<(), BoxedError> {
     if !size.is_empty() && !ProxyConfig::is_body_size(size) {
         return Err(format!(
             "[proxy] max_body_size = {size:?} is not an angie size; use \"0\" for no limit, a byte count, or a suffix like \"64m\" (\"\" leaves the directive to angie)"
+        )
+        .into());
+    }
+    let dir = &cfg.proxy.ssl_certs_dir;
+    if !dir.is_empty() && !dir.starts_with('/') {
+        return Err(format!(
+            "[proxy] ssl_certs_dir = {dir:?} must be an absolute host path; the docker \
+             engine API rejects relative bind sources (e.g. ssl_certs_dir = \
+             \"/Users/you/.aka/proxy.d/certs\")"
         )
         .into());
     }

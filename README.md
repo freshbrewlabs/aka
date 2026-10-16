@@ -105,6 +105,8 @@ Names are compatible with dory / nginx-proxy, so existing containers just work.
 - **terminated https** — drop `<host>.crt` + `<host>.key` into
   `proxy.ssl_certs_dir` and any http route for that host also gets a TLS
   vhost on `:8443` (SNI on the shared `:443` listener hops to it).
+  `aka cert-gen <host>` generates the pair from aka's own local CA and
+  trusts that CA in your system, so `https://<host>` goes green.
 
 Proxied connections get a 1 h idle window in both directions
 (`proxy_read_timeout` / `proxy_send_timeout`, rendered once in the http

@@ -1,3 +1,6 @@
+#[cfg(unix)]
+use std::os::unix::fs::DirBuilderExt as _;
+
 use std::path::PathBuf;
 
 use aka_kernel::BoxedError;
@@ -36,6 +39,13 @@ impl AkaPaths {
         self.home.join("proxy.d").join("stream")
     }
 
+    /// Directory holding the local CA (`ca.crt`/`ca.key`). Deliberately not
+    /// under `proxy.d`: the CA is never mounted into a container, only the
+    /// per-host pairs in `ssl_certs_dir` are.
+    pub fn ca_dir(&self) -> PathBuf {
+        self.home.join("ca")
+    }
+
     pub fn state_file(&self) -> PathBuf {
         self.home.join("state.json")
     }
@@ -52,6 +62,15 @@ impl AkaPaths {
         std::fs::create_dir_all(&self.home)?;
         std::fs::create_dir_all(self.http_dir())?;
         std::fs::create_dir_all(self.stream_dir())?;
+        // The CA dir holds a private key, so it is 0700 from the start;
+        // `certs::ensure_ca` relies on it never being world-readable.
+        #[cfg(unix)]
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(self.ca_dir())?;
+        #[cfg(not(unix))]
+        std::fs::create_dir_all(self.ca_dir())?;
         Ok(())
     }
 }

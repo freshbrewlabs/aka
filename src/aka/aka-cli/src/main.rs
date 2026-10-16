@@ -65,6 +65,28 @@ enum Commands {
         #[arg(short, long)]
         upgrade: bool,
     },
+    /// Issue a self-signed cert for a host in ssl_certs_dir; the aka CA is
+    /// created on first use, and registering that first CA is the only flow
+    /// that can ever prompt for sudo
+    CertGen {
+        /// Host to issue for, e.g. api.docker
+        host: Option<String>,
+        /// RSA key material (new CA 4096 bits, leaf 2048) instead of ECDSA P-256
+        #[arg(long)]
+        rsa: bool,
+        /// Ensure the CA exists; print path + SHA-256 fingerprint
+        #[arg(long)]
+        ca: bool,
+        /// Reconcile the CA into every supported trust store
+        #[arg(long)]
+        trust: bool,
+        /// Remove the CA from every trust store holding it
+        #[arg(long)]
+        untrust: bool,
+        /// Delete the CA and every cert pair it issued from ssl_certs_dir
+        #[arg(long)]
+        clean: bool,
+    },
     /// Install the sudoers rule that makes `aka up`/`aka down` sudo-free
     /// (a one-time sudo; the rule is scoped to aka's own `_privileged` verb)
     InstallSudoRule,
@@ -158,6 +180,9 @@ async fn main() -> Result<(), aka_kernel::BoxedError> {
         Commands::Pull => commands::pull(&provider).await,
         Commands::Routes { json } => commands::routes(&provider, json),
         Commands::ConfigFile { force, upgrade } => commands::config_file(&provider, force, upgrade),
+        Commands::CertGen { host, rsa, ca, trust, untrust, clean } => {
+            commands::cert_gen(&provider, host.as_deref(), ca, trust, untrust, clean, rsa)
+        }
         Commands::InstallSudoRule => commands::install_sudo_rule(),
         Commands::Update { git_ref } => commands::update(&provider, git_ref.as_deref()),
         Commands::Version => commands::version(),
