@@ -13,7 +13,7 @@ aka-services = { path = "../../aka/aka-services" }
 
 # path-only requirements: a workspace-wide version bump (bin/version.sh)
 # must not strand a pinned requirement behind the crate it points at
-provider = { path = "../../xlib/provider" }
+provider-rs = "0.1.0"
 telemetry = { path = "../../xlib/telemetry" }
 
 serde = { version = "1.0.228", features = ["derive"] }

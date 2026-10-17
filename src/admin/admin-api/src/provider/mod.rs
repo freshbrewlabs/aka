@@ -1,7 +1,7 @@
 pub mod aka;
 pub mod services;
 
-use provider::Provider;
+use provider_rs::Provider;
 
 use crate::BoxedError;
 

@@ -14,7 +14,7 @@ dependencies = [
  "aka-services",
  "async-trait",
  "axum",
- "provider",
+ "provider-rs",
  "serde",
  "serde_json",
  "telemetry",
@@ -107,7 +107,7 @@ dependencies = [
  "aka-services",
  "clap",
  "futures",
- "provider",
+ "provider-rs",
  "serde_json",
  "telemetry",
  "tokio",
@@ -2228,8 +2228,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "provider"
-version = "0.4.1"
+name = "provider-rs"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21d9eb79121e46387b04370924852940f98398a8f49f8e94306696d5915e1f01"
 
 [[package]]
 name = "quote"

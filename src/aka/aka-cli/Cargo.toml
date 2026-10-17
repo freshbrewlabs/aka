@@ -12,7 +12,7 @@ aka-kernel = { path = "../aka-kernel" }
 aka-docker = { path = "../aka-docker" }
 aka-services = { path = "../aka-services" }
 
-provider = { path = "../../xlib/provider" }
+provider-rs = "0.1.0"
 telemetry = { path = "../../xlib/telemetry" }
 
 clap = { version = "4.6.7", features = ["derive"] }

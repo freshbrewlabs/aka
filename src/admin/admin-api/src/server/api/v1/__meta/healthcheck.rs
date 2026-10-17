@@ -1,6 +1,6 @@
 use admin_http::healthcheck::HealthcheckRes;
 use axum::{Json, extract::State, response::IntoResponse};
-use provider::Provider;
+use provider_rs::Provider;
 
 #[tracing::instrument(name = "GET /api/v1/__meta/healthcheck", skip(_provider))]
 pub async fn handler(_provider: State<Provider>) -> impl IntoResponse {

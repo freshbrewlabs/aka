@@ -154,7 +154,7 @@ async fn main() -> Result<(), aka_kernel::BoxedError> {
     let daemon = matches!(cli.command, Commands::Proxyd);
     let privileged = matches!(cli.command, Commands::Privileged { .. });
 
-    let mut provider = provider::Provider::new();
+    let mut provider = provider_rs::Provider::new();
     provider.store(aka_services::AkaPaths::resolve()?);
     if !privileged {
         // the root-side verb takes everything from argv; it must not read

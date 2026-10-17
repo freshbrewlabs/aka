@@ -7,7 +7,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
-use provider::Provider;
+use provider_rs::Provider;
 use serde::Serialize;
 
 use crate::BoxedError;
@@ -46,7 +46,7 @@ mod tests {
     use admin_services::{GetStatusService, GetStatusTrait};
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
-    use provider::Provider;
+    use provider_rs::Provider;
     use tower::ServiceExt;
 
     use super::*;

@@ -5,7 +5,7 @@
 
 use std::path::PathBuf;
 
-use provider::Provider;
+use provider_rs::Provider;
 use tracing::info;
 
 use aka_services::load_or_default;

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use provider::Provider;
+use provider_rs::Provider;
 use tracing::info;
 
 use admin_services::{GetStatusService, GetStatusUseCase};

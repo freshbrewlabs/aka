@@ -7,7 +7,7 @@ use tower_http::cors::CorsLayer;
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::info;
 
-use provider::Provider;
+use provider_rs::Provider;
 
 use crate::BoxedError;
 
@@ -113,7 +113,7 @@ mod tests {
     use admin_services::{GetStatusService, GetStatusTrait};
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
-    use provider::Provider;
+    use provider_rs::Provider;
     use tower::ServiceExt;
 
     use super::*;

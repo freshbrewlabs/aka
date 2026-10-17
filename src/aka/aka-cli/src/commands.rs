@@ -8,7 +8,7 @@ use aka_kernel::config::AkaConfig;
 use aka_services::config::ImagePins;
 use aka_services::paths::AkaPaths;
 use futures::{Stream, StreamExt};
-use provider::Provider;
+use provider_rs::Provider;
 use tokio::signal::unix::{SignalKind, signal};
 use tracing::info;
 
@@ -50,9 +50,9 @@ pub fn resolve_config(explicit: &Option<PathBuf>, _daemon: bool) -> Result<AkaCo
 
 fn ctx(provider: &Provider) -> (&AkaConfig, &AkaPaths, &AkaDocker) {
     (
-        provider.fetch_unchecked::<AkaConfig>(),
-        provider.fetch_unchecked::<AkaPaths>(),
-        provider.fetch_unchecked::<AkaDocker>(),
+        provider.fetch_expect::<AkaConfig>(),
+        provider.fetch_expect::<AkaPaths>(),
+        provider.fetch_expect::<AkaDocker>(),
     )
 }
 
@@ -128,7 +128,7 @@ pub async fn up(provider: &Provider) -> Result<(), BoxedError> {
 
     // admin reads the very config the CLI resolved, so mounting it keeps the
     // dashboard's in-container discovery honest even with renamed services.
-    let selection = provider.fetch_unchecked::<ConfigSelection>();
+    let selection = provider.fetch_expect::<ConfigSelection>();
     let start = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
     let config_file = aka_services::config::find_config_file(&start, selection.explicit.as_deref());
     let outcomes = aka_services::lifecycle::up(docker, cfg, paths, config_file.as_deref()).await?;
@@ -201,7 +201,7 @@ fn ensure_daemon(paths: &AkaPaths, provider: &Provider) -> DaemonSpawn {
         .expect("open proxyd log");
     let log_err = log.try_clone().expect("clone log");
 
-    let selection = provider.fetch_unchecked::<ConfigSelection>();
+    let selection = provider.fetch_expect::<ConfigSelection>();
     let mut command = Command::new(std::env::current_exe().expect("current exe"));
     command
         .arg("_proxyd")
@@ -472,7 +472,7 @@ pub async fn pull(provider: &Provider) -> Result<(), BoxedError> {
 // ------------------------------------------------------------------ routes
 
 pub fn routes(provider: &Provider, json: bool) -> Result<(), BoxedError> {
-    let paths = provider.fetch_unchecked::<AkaPaths>();
+    let paths = provider.fetch_expect::<AkaPaths>();
     let state = aka_services::statefile::read(&paths.state_file())?
         .ok_or("proxyd has not run yet (start with `aka up`)")?;
 
@@ -487,7 +487,7 @@ pub fn routes(provider: &Provider, json: bool) -> Result<(), BoxedError> {
 // ------------------------------------------------------------- config-file
 
 pub fn config_file(provider: &Provider, force: bool, upgrade: bool) -> Result<(), BoxedError> {
-    let selection = provider.fetch_unchecked::<ConfigSelection>();
+    let selection = provider.fetch_expect::<ConfigSelection>();
     let target = selection
         .explicit
         .clone()
@@ -562,8 +562,8 @@ pub fn cert_gen(
     use aka_services::certs::KeyAlg;
     use aka_services::trust;
 
-    let cfg = provider.fetch_unchecked::<AkaConfig>();
-    let paths = provider.fetch_unchecked::<AkaPaths>();
+    let cfg = provider.fetch_expect::<AkaConfig>();
+    let paths = provider.fetch_expect::<AkaPaths>();
     let home = std::env::var("HOME")
         .map(PathBuf::from)
         .map_err(|_| "HOME is not set")?;
@@ -821,7 +821,7 @@ fn installed_version(bin: &std::path::Path) -> Option<String> {
 /// running binary is fine on unix, and the path does not change, so the
 /// sudoers rule keeps pointing at the new one.
 pub fn update(provider: &Provider, git_ref: Option<&str>) -> Result<(), BoxedError> {
-    let paths = provider.fetch_unchecked::<AkaPaths>();
+    let paths = provider.fetch_expect::<AkaPaths>();
     let git_ref = git_ref
         .map(str::to_string)
         .or_else(|| std::env::var("AKA_REF").ok())
@@ -898,7 +898,7 @@ pub async fn proxyd(provider: &Provider) -> Result<(), BoxedError> {
     let pid_file = paths.pid_file();
     let _ = std::fs::write(&pid_file, format!("{}\n", std::process::id()));
 
-    let selection = provider.fetch_unchecked::<ConfigSelection>();
+    let selection = provider.fetch_expect::<ConfigSelection>();
     let config_path = selection
         .explicit
         .as_ref()
