@@ -3,7 +3,7 @@ use leptos::{logging::log, prelude::*};
 use admin_kernel::entities::StatusReport;
 
 use crate::state::AppState;
-pub use http::data::LoadingState;
+pub use http_envelope::data::LoadingState;
 
 /// proxyd rewrites state.json every 20s and on every docker event, and the
 /// snapshot itself costs two docker calls plus one file read — a few seconds

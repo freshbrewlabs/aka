@@ -10,7 +10,7 @@ path = "src/main.rs"
 [dependencies]
 admin-rs = { path = "../admin-rs" }
 admin-kernel = { path = "../admin-kernel" }
-http = { path = "../../xlib/http" }
+http-envelope = "0.1.0"
 leptos = { version = "0.8.15", features = ["csr"] }
 leptos_router = { version = "0.8.11" }
 web-sys = { version = "0.3.83", features = ["Window"] }

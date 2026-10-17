@@ -1,7 +1,7 @@
 use leptos::{logging::log, prelude::*};
 
 use crate::state::AppState;
-pub use http::data::LoadingState;
+pub use http_envelope::data::LoadingState;
 
 pub struct HandleHealthcheckResponse {
     pub version: ReadSignal<LoadingState<String>>,
