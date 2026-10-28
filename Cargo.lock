@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "admin-api"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "admin-http",
  "admin-kernel",
@@ -26,7 +26,7 @@ dependencies = [
 
 [[package]]
 name = "admin-http"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "admin-kernel",
  "serde",
@@ -34,14 +34,14 @@ dependencies = [
 
 [[package]]
 name = "admin-kernel"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "admin-rs"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "admin-http",
  "admin-kernel",
@@ -51,7 +51,7 @@ dependencies = [
 
 [[package]]
 name = "admin-services"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "admin-kernel",
  "aka-docker",
@@ -64,7 +64,7 @@ dependencies = [
 
 [[package]]
 name = "admin-web"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "admin-kernel",
  "admin-rs",
@@ -100,7 +100,7 @@ dependencies = [
 
 [[package]]
 name = "aka-cli"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "aka-docker",
  "aka-kernel",
@@ -116,7 +116,7 @@ dependencies = [
 
 [[package]]
 name = "aka-docker"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "aka-kernel",
  "bollard",
@@ -128,14 +128,14 @@ dependencies = [
 
 [[package]]
 name = "aka-kernel"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "aka-services"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "aka-docker",
  "aka-kernel",
@@ -3037,7 +3037,7 @@ dependencies = [
 
 [[package]]
 name = "telemetry"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "tracing",
  "tracing-bunyan-formatter",
