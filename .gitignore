@@ -36,3 +36,4 @@ secrets/*.json
 !.opencode/.gitignore
 !.opencode/package.json
 !.opencode/package-lock.json
+.changelogger/.active

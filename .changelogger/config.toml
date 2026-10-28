@@ -1,0 +1,21 @@
+# changelogger
+# Unreleased entries live as files in .changelogger/unreleased; `cl release`
+# folds them into CHANGELOG.md (keepachangelog.com 1.1.0).
+
+# Canonical ticket id form: number | zero_padded_number (5 digits, e.g. 00042) | string
+ticket_id = "number"
+
+# Ticket label for entry filenames and link text; `{id}` is required.
+ticket_prefix = "{id}"
+
+# Ticket URL; `{ticket_id}` and/or `{ticket_prefix}`. Unset = `cl new` prompts per entry.
+ticket_link = "https://git.freshbrewlabs.cloud/freshbrewlabs/aka/issues/1{ticket_id}"
+
+# AI Assist: `cl assist` drafts changelog bullets from the branch's
+# diff against the default branch. Uncomment to preconfigure; otherwise
+# `cl assist` prompts for these values on first run and saves them.
+# [llm]
+# host = "https://api.openai.com/v1"    # any OpenAI-compatible base URL
+# api_key = "sk-..."
+# api_kind = "openai_responses"         # or "openai_completions"
+# model = "gpt-5-mini"
