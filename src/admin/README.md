@@ -122,6 +122,17 @@ how recently `state.json` was written rather than `kill -0` on the pid file —
 `kill -0` is meaningless from a container with its own pid namespace. See
 `PROXYD_FRESH_SECS` in `admin-services/src/status.rs`.
 
+`/routes` re-groups that table by **base** — a host's last two labels, so
+`www.parkinglot.localhost` and `db.parkinglot.localhost` share the
+`parkinglot.localhost` card — which makes the route class (http, sni, tls
+terminated, tcp) a column instead of four tables. Its filter box narrows the
+cards, their host rows and the conflict lines in the browser only
+(`admin-web/src/features/status/route_index.rs`): the snapshot is always
+fetched whole, so a filter can never hide a route from `aka status`, and the
+metric tiles keep counting all of them. A term matches a row's host, base,
+class, proto, port, upstreams or containers, and several terms have to land in
+the same row — so naming a base keeps that base whole.
+
 ## Run it
 
 ```bash

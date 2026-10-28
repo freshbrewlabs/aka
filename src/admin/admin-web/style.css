@@ -125,6 +125,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    /* A base's hostname can be long; wrapping beats pushing the count out. */
+    flex-wrap: wrap;
     gap: 12px;
     margin-bottom: 12px;
 }
@@ -185,7 +187,26 @@ body {
 
 .btn:hover { border-color: var(--accent); }
 
+/* The routes filter: same footprint as .btn so the two header controls line
+   up, and narrow enough to leave the title its row. */
+.search-input {
+    width: 300px;
+    max-width: 45vw;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+}
+
+.search-input::placeholder { color: var(--muted); }
+.search-input:focus { border-color: var(--accent); outline: none; }
+
 .muted { color: var(--muted); }
+
+/* What a filter left behind, counted. */
+.filter-note { color: var(--muted); font-size: 13px; margin: -8px 0 16px; }
 
 /* ------------------------------------------------------------- components */
 
@@ -206,6 +227,12 @@ body {
 .row-rejected { background: rgba(248, 113, 113, 0.07); }
 
 .row-note { color: var(--danger); font-size: 12px; margin-top: 4px; }
+
+/* One card per base: the hostname is the title, so it may take the row. */
+.route-base { overflow-wrap: anywhere; }
+
+/* The route class is a fact about the row, not a status: no colour. */
+.chip-route { color: var(--muted); }
 
 .detail-list { display: grid; gap: 10px; }
 

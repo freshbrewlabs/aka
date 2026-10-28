@@ -2,9 +2,10 @@ use leptos::prelude::*;
 use leptos_router::components::A;
 
 use admin_kernel::entities::{
-    ProxydState, ProxydStatus, RouteView, RoutesStatus, ServiceStatus, StatusReport, TerminatedView,
+    ProxydState, ProxydStatus, RoutesStatus, ServiceStatus, StatusReport,
 };
 
+use super::route_index::{self, RouteGroup, RouteRow};
 use super::signals::{LoadingState, StatusState};
 
 const DASH: &str = "—";
@@ -271,11 +272,25 @@ pub fn RoutesPage() -> impl IntoView {
     let status = expect_context::<StatusState>();
     let refresh = status.refresh;
 
+    // The filter belongs to the page, not the API: the snapshot always carries
+    // every route, so narrowing the table never narrows `aka status` or the
+    // metric tiles above it.
+    let (query, set_query) = signal(String::new());
+
     view! {
         <div class="page-header">
             <h1 class="page-title">"Routes"</h1>
 
             <div class="row-actions">
+                <input
+                    class="search-input"
+                    type="search"
+                    aria-label="Filter routes"
+                    placeholder="filter hosts, bases, ports, containers"
+                    value=move || query.get()
+                    on:input=move |ev| set_query.set(event_target_value(&ev))
+                />
+
                 <button class="btn" on:click=move |_| refresh.run(())>"Refresh"</button>
             </div>
         </div>
@@ -285,20 +300,16 @@ pub fn RoutesPage() -> impl IntoView {
                 view! { <p class="muted">"Loading..."</p> }.into_any()
             }
             LoadingState::Error(err) => warning(format!("admin-api unreachable: {err}")),
-            LoadingState::Loaded(report) => routes_body(report.routes),
+            LoadingState::Loaded(report) => routes_body(report.routes, query),
         }}
     }
 }
 
-fn routes_body(routes: RoutesStatus) -> AnyView {
+fn routes_body(routes: RoutesStatus, query: ReadSignal<String>) -> AnyView {
     let RoutesStatus {
-        counts,
-        http,
-        tls,
-        terminated,
-        tcp,
-        conflicts,
-    } = routes;
+        counts, conflicts, ..
+    } = routes.clone();
+    let total = route_index::host_count(&routes);
 
     view! {
         <div class="metric-grid">
@@ -309,123 +320,112 @@ fn routes_body(routes: RoutesStatus) -> AnyView {
             {metric(counts.rejected.to_string(), "rejected")}
         </div>
 
-        {route_table("http / https vhosts", None, http)}
-        {route_table("tls sni passthrough", Some("routed by SNI on :443"), tls)}
-        {terminated_table(terminated)}
-        {route_table("raw tcp", Some("published on :port"), tcp)}
+        {move || {
+            let groups = route_index::groups(&routes, &query.get());
+            let shown: usize = groups.iter().map(|group| group.rows.len()).sum();
+            let needle = query.get().trim().to_string();
 
-        {conflicts_list(conflicts)}
+            view! {
+                {(!needle.is_empty()).then(|| view! {
+                    <p class="filter-note">{format!("{shown} of {total} host(s) match")}</p>
+                })}
+
+                {if groups.is_empty() {
+                    let note = if needle.is_empty() {
+                        "No routes discovered yet — no container declares a virtual host.".to_string()
+                    } else {
+                        format!("No route matches \"{needle}\".")
+                    };
+
+                    view! { <p class="muted">{note}</p> }.into_any()
+                } else {
+                    groups.into_iter().map(base_card).collect_view().into_any()
+                }}
+            }
+        }}
+
+        {move || conflicts_list(filter_conflicts(&conflicts, &query.get()))}
     }
     .into_any()
 }
 
-fn route_table(title: &'static str, note: Option<&'static str>, routes: Vec<RouteView>) -> AnyView {
-    let count = routes.len();
-    let label = match note {
-        Some(note) => format!("{} route(s) · {}", count, note),
-        None => format!("{} route(s)", count),
+/// One base — `parking.localhost`, the `*.{base}.localhost` aka resolves — and
+/// every host under it, whatever kind of route serves that host.
+fn base_card(group: RouteGroup) -> AnyView {
+    let RouteGroup { base, rows } = group;
+    let count = rows.len();
+
+    view! {
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title route-base">{base}</h2>
+
+                <span class="muted">{format!("{count} host(s)")}</span>
+            </div>
+
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>"Host"</th>
+                        <th>"Route"</th>
+                        <th>"Proto"</th>
+                        <th>"Port"</th>
+                        <th>"Upstream"</th>
+                        <th>"Containers"</th>
+                    </tr>
+                </thead>
+                <tbody>{rows.into_iter().map(route_row).collect_view()}</tbody>
+            </table>
+        </div>
+    }
+    .into_any()
+}
+
+fn route_row(row: RouteRow) -> AnyView {
+    let RouteRow {
+        host,
+        class,
+        proto,
+        port,
+        servers,
+        containers,
+        rejected,
+    } = row;
+
+    let row_class = if rejected.is_some() {
+        "row-rejected"
+    } else {
+        ""
     };
 
     view! {
-        <div class="card">
-            <div class="card-header">
-                <h2 class="card-title">{title}</h2>
+        <tr class=row_class>
+            <td>
+                {host}
 
-                <span class="muted">{label}</span>
-            </div>
-
-            {if count == 0 {
-                view! { <p class="muted">"No routes in this class."</p> }.into_any()
-            } else {
-                view! {
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>"Hosts"</th>
-                                <th>"Proto"</th>
-                                <th>"Port"</th>
-                                <th>"Upstream"</th>
-                                <th>"Containers"</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {routes
-                                .into_iter()
-                                .map(|route| {
-                                    let rejected = route.rejected;
-                                    let row_class = if rejected.is_some() { "row-rejected" } else { "" };
-
-                                    view! {
-                                        <tr class=row_class>
-                                            <td>
-                                                {route.hosts.join(", ")}
-
-                                                {rejected.map(|note| view! {
-                                                    <div class="row-note">{note}</div>
-                                                })}
-                                            </td>
-                                            <td class="muted">{route.proto}</td>
-                                            <td class="muted">{route.port.to_string()}</td>
-                                            <td class="muted">{route.servers.join(", ")}</td>
-                                            <td class="muted">{route.containers.join(", ")}</td>
-                                        </tr>
-                                    }
-                                })
-                                .collect_view()}
-                        </tbody>
-                    </table>
-                }
-                .into_any()
-            }}
-        </div>
+                {rejected.map(|note| view! { <div class="row-note">{note}</div> })}
+            </td>
+            <td>{chip("chip-route", class.label().to_string())}</td>
+            <td class="muted">{proto}</td>
+            <td class="muted">{port.map(|port| port.to_string()).unwrap_or_else(|| DASH.to_string())}</td>
+            <td class="muted">{servers.join(", ")}</td>
+            <td class="muted">{containers.join(", ")}</td>
+        </tr>
     }
     .into_any()
 }
 
-fn terminated_table(terminated: Vec<TerminatedView>) -> AnyView {
-    let count = terminated.len();
+/// A filter narrows the conflict lines too, so searching for one host shows
+/// its problems rather than the whole argument. Rejected routes stay visible
+/// either way, exactly as they do unfiltered.
+fn filter_conflicts(conflicts: &[String], query: &str) -> Vec<String> {
+    let terms = route_index::terms(query);
 
-    view! {
-        <div class="card">
-            <div class="card-header">
-                <h2 class="card-title">"tls terminated"</h2>
-
-                <span class="muted">{format!("{} host(s) · cert pair in ssl_certs_dir", count)}</span>
-            </div>
-
-            {if count == 0 {
-                view! { <p class="muted">"No terminated hosts."</p> }.into_any()
-            } else {
-                view! {
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>"Host"</th>
-                                <th>"Proto"</th>
-                                <th>"Upstream"</th>
-                                <th>"Container"</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {terminated
-                                .into_iter()
-                                .map(|route| view! {
-                                    <tr>
-                                        <td>{route.host}</td>
-                                        <td class="muted">{route.proto}</td>
-                                        <td class="muted">{route.servers.join(", ")}</td>
-                                        <td class="muted">{route.container}</td>
-                                    </tr>
-                                })
-                                .collect_view()}
-                        </tbody>
-                    </table>
-                }
-                .into_any()
-            }}
-        </div>
-    }
-    .into_any()
+    conflicts
+        .iter()
+        .filter(|conflict| route_index::text_matches(conflict, &terms))
+        .cloned()
+        .collect()
 }
 
 /// Shown on the status page only when something is actually wrong.
