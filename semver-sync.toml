@@ -1,0 +1,15 @@
+# semver-sync configuration.
+#
+# The first file that exists is the one read:
+#   1. the repo root: semver-sync.toml, then .semver-sync.toml
+#   2. $HOME: semver-sync.toml, then .semver-sync.toml
+#   3. the user config dir ($XDG_CONFIG_HOME, else $HOME/.config): the same two
+#      names
+#
+# So a repo can say something different from the machine it sits on.
+
+# Tag the version as v<VERSION>, then push the commits and the tag with them.
+# The tag lands on the commit you are standing on: commit what a bump wrote
+# first when the tag has to carry it.
+git-tag = true
+
