@@ -9,7 +9,7 @@ ticket_id = "number"
 ticket_prefix = "{id}"
 
 # Ticket URL; `{ticket_id}` and/or `{ticket_prefix}`. Unset = `cl new` prompts per entry.
-ticket_link = "https://git.freshbrewlabs.cloud/freshbrewlabs/aka/issues/1{ticket_id}"
+ticket_link = "https://git.freshbrewlabs.cloud/freshbrewlabs/aka/issues/{ticket_id}"
 
 # AI Assist: `cl assist` drafts changelog bullets from the branch's
 # diff against the default branch. Uncomment to preconfigure; otherwise

@@ -1,4 +1,4 @@
-### [1](https://git.freshbrewlabs.cloud/freshbrewlabs/aka/issues/11) - searchable and grouped routes
+### [1](https://git.freshbrewlabs.cloud/freshbrewlabs/aka/issues/1) - searchable and grouped routes
 
 #### Added
 
