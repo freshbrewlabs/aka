@@ -1,0 +1,48 @@
+# aka's public landing page on the freshbrewlabs k3s cluster.
+# Deploy: helm upgrade --install aka-public devops/helm/aka-public \
+#   --set image.tag=0.3.4 \
+#   --set registryCredentials.registry=registry.freshbrewlabs.cloud \
+#   --set registryCredentials.username='robot$...' \
+#   --set registryCredentials.password=...
+# (pull secret is rendered in-chart from registryCredentials, like rolodex/parkinglot)
+
+namespace: default
+
+image:
+  # Harbor is private; the rendered pull secret authenticates it.
+  repository: registry.freshbrewlabs.cloud/aka/aka-public
+  tag: latest
+  pullPolicy: IfNotPresent
+  # Public mirror alternative (no pull secret needed):
+  #   --set image.repository=docker.io/dewey4iv/aka-public
+
+registryCredentials:
+  registry: ""
+  username: ""
+  password: ""
+
+replicaCount: 2
+
+containerPort: 8080
+service:
+  port: 80
+
+ingress:
+  # k3s ships Traefik as its ingress controller.
+  className: traefik
+  host: akacli.io
+  # TLS is terminated at the edge by angie (ACME there), like the harbor and
+  # woodpecker charts: traefik gets plain http. Enable only if this host is
+  # ever moved behind cert-manager instead.
+  tls:
+    enabled: false
+    clusterIssuer: letsencrypt
+    secretName: aka-public-tls
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 16Mi
+  limits:
+    cpu: 100m
+    memory: 64Mi

@@ -34,6 +34,7 @@ digests, all platforms).
 | after-specs.yml | same | Slack notification gate; builds depend on it |
 | aka-{proxy,dns}-build.yml | tag `v*` **only** | buildx → Harbor amd64+arm64 `:<aka-cli ver>,latest` → hub-mirror |
 | aka-admin-build.yml | tag `v*` **only** | buildx (cross-linked) on an amd64 node → Harbor amd64+arm64 `:<admin-api ver>,latest` → hub-mirror |
+| aka-public-build.yml | tag `v*` **only** | buildx (copy-only static site, `src/public/`) → Harbor amd64+arm64 `:<aka-cli ver>,latest` → hub-mirror |
 | after-build.yml | tag `v*` | Slack notification; terminal marker |
 
 A tag is the only thing that produces an image. Tags come from the crate
@@ -62,7 +63,7 @@ which is what aka's default config (`DEFAULT_TOML` in
 for unreleased local experiments; CI does not run `build.sh`.
 
 The mirror step downloads `crane` **pinned to v0.22.1** (asset
-`go-containerregistry_Linux_x86_64.tar.gz`) — bump all three workflows
+`go-containerregistry_Linux_x86_64.tar.gz`) — bump all four workflows
 together when updating.
 
 ## Rotating/updating secrets
@@ -76,10 +77,10 @@ together when updating.
 ## Verifying
 
 - PR touching `src/**/*.rs` → lint + unit run, after-specs aggregates + Slack.
-- `git tag v0.3.4 && git push --tags` → specs first, then the three builds;
-  check `aka/aka-{proxy,dns,admin}:0.3.4` + `:latest` in the Harbor UI **and**
+- `git tag v0.3.4 && git push --tags` → specs first, then the four builds;
+  check `aka/aka-{proxy,dns,admin,public}:0.3.4` + `:latest` in the Harbor UI **and**
   `dewey4iv/aka-*` on Docker Hub. `docker buildx imagetools inspect` both: all
-  three images list amd64 **and** arm64 in each registry.
+  four images list amd64 **and** arm64 in each registry.
 - Grep of `workflows/` for `kubectl|helm|argocd` must stay empty.
 
 ## Gotchas

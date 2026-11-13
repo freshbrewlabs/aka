@@ -39,6 +39,7 @@ depends_on:
   - aka-proxy-build
   - aka-dns-build
   - aka-admin-build
+  - aka-public-build
 
 when:
   - event: tag

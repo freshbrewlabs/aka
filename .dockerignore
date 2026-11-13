@@ -9,3 +9,5 @@
 *.env
 .aka-dev
 .aka.toml
+# the deploy chart (incl. values-production.yaml.enc) must not ship in the site
+src/public/helm
