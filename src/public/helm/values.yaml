@@ -1,9 +1,6 @@
 # aka's public landing page on the freshbrewlabs k3s cluster.
-# Deploy: helm upgrade --install aka-public devops/helm/aka-public \
-#   --set image.tag=0.3.4 \
-#   --set registryCredentials.registry=registry.freshbrewlabs.cloud \
-#   --set registryCredentials.username='robot$...' \
-#   --set registryCredentials.password=...
+# Deploy: bin/deploy.sh            (or bin/deploy.sh <version>)
+# The script wraps this helm command with the overlay + rollout checks.
 # (pull secret is rendered in-chart from registryCredentials, like rolodex/parkinglot)
 
 namespace: default
