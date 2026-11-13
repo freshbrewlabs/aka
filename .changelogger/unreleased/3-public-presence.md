@@ -1,4 +1,4 @@
-### [3](https://git.freshbrewlabs.cloud/freshbrewlabs/aka/issues/13) - public presence
+### [3](https://git.freshbrewlabs.cloud/freshbrewlabs/aka/issues/3) - public presence
 
 #### Added
 
