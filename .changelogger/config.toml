@@ -16,6 +16,6 @@ ticket_link = "https://git.freshbrewlabs.cloud/freshbrewlabs/aka/issues/1{ticket
 # `cl assist` prompts for these values on first run and saves them.
 [llm]
 host = "https://wolverine.0.lab.freshbrewlabs.com/v1"    # any OpenAI-compatible base URL
-api_key = "50ff21e7-06ef-481a-8ce6-9d4c5bd36fd7"
+api_key_env = "FRESHBREWLABS_LLM_API_KEY"   # env var holding the key; set it in .env
 api_kind = "openai_responses"         # or "openai_completions"
 model = "nvidia/Qwen3.6-35B-A3B-NVFP4"
