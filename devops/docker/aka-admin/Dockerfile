@@ -19,8 +19,8 @@
 # invocation with both platforms (src/admin/build.sh); a plain `docker build`
 # still yields the builder's own arch.
 
-ARG RUST_DEV_IMAGE_VERSION=v1.99.1
-ARG DEBIAN_SLIM_BASE_IMAGE_VERSION=trixie-slim
+ARG RUST_DEV_IMAGE_VERSION=v1.100.0
+ARG DEBIAN_SLIM_BASE_IMAGE_VERSION=13.7-2026.46.0
 
 # The dashboard bundle. Builder-pinned, and its instructions are identical for
 # every target platform, so BuildKit resolves this stage once per multi-arch
@@ -80,7 +80,7 @@ RUN --mount=type=cache,id=aka-admin-cargo-registry,target=/usr/local/cargo/regis
     cp "/build/cargo-target/${TARGETARCH}/${RUST_TARGET}/release/admin-api" \
       /usr/local/bin/admin-api
 
-FROM debian:${DEBIAN_SLIM_BASE_IMAGE_VERSION}
+FROM registry.freshbrewlabs.cloud/base/debian:${DEBIAN_SLIM_BASE_IMAGE_VERSION}
 
 COPY --from=build /usr/local/bin/admin-api /usr/local/bin/admin-api
 COPY --from=web /build/src/admin/admin-web/dist /usr/share/aka-admin/web

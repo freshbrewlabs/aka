@@ -22,8 +22,8 @@ steps:
       context: .                                       # admin-api compiles aka's crates
       platforms: linux/amd64,linux/arm64   # cross-linked, not QEMU-compiled
       build_args:
-        - RUST_DEV_IMAGE_VERSION=v1.99.1    # keep in lockstep with the Dockerfile
-        - DEBIAN_SLIM_BASE_IMAGE_VERSION=trixie-slim   # ARG defaults + stylance
+        - RUST_DEV_IMAGE_VERSION=v1.100.0   # keep in lockstep with the Dockerfile
+        - DEBIAN_SLIM_BASE_IMAGE_VERSION=13.7-2026.46.0   # ARG defaults + stylance
       username:
         from_secret: docker_username
       password:
